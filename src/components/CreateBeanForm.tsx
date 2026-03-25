@@ -73,6 +73,7 @@ export function CreateBeanForm({
         const bean = await createBean({
           projectPath,
           title: title.trim(),
+          status,
           beanType,
           parent: parentId ?? undefined,
           tags: tagsArray.length > 0 ? tagsArray : undefined,

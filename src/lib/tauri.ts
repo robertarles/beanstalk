@@ -10,6 +10,7 @@ export const getBean = (projectPath: string, beanId: string) =>
 export const createBean = (params: {
   projectPath: string;
   title: string;
+  status: string;
   beanType?: string;
   parent?: string | null;
   tags?: string[];

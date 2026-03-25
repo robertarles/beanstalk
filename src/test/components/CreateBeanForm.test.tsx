@@ -95,7 +95,40 @@ describe('CreateBeanForm', () => {
       expect.objectContaining({
         projectPath: '/project',
         title: 'My New Bean',
+        status: expect.any(String), // beanstalk-6p3a: status must always be sent
       })
     )
+  })
+
+  // ── beanstalk-6p3a: status forwarded to create_bean ──────────────────────
+
+  it('sends the default status to create_bean (status is not omitted)', async () => {
+    // Regression: create_bean requires status; omitting it caused a Tauri error.
+    mockInvoke.mockResolvedValueOnce(mockCreatedBean)
+    const onCreated = vi.fn()
+    render(
+      <CreateBeanForm
+        {...defaultProps}
+        availableStatuses={['open', 'in-progress', 'done']}
+        onCreated={onCreated}
+      />
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('Bean title'), {
+      target: { value: 'Status Test Bean' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Create Bean/i }))
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'create_bean',
+        expect.objectContaining({
+          title: 'Status Test Bean',
+          // status must be present and be a non-empty string
+          status: expect.stringMatching(/\w+/),
+        })
+      )
+    })
   })
 })
