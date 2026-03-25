@@ -66,10 +66,11 @@ pub fn create_bean(
     status: String,
     bean_type: String,
     parent: Option<String>,
-    tags: Vec<String>,
+    tags: Option<Vec<String>>,
     assignee: Option<String>,
     body: String,
 ) -> Result<Bean, String> {
+    let tags = tags.unwrap_or_default();
     let slug = title
         .split_whitespace()
         .next()
@@ -420,7 +421,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "some body".to_string(),
         );
@@ -450,7 +451,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         );
@@ -558,7 +559,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         );
@@ -588,7 +589,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         )
@@ -617,7 +618,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         )
@@ -632,7 +633,7 @@ mod tests {
             "done".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         )
@@ -665,7 +666,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         )
@@ -696,7 +697,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         )
@@ -825,7 +826,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         )
@@ -853,7 +854,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         )
@@ -890,7 +891,7 @@ mod tests {
             "open".to_string(),
             "task".to_string(),
             None,
-            vec![],
+            Some(vec![]),
             None,
             "".to_string(),
         )
