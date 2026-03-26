@@ -142,6 +142,7 @@ pub fn update_bean(
     tags: Option<Vec<String>>,
     assignee: Option<String>,
     body: Option<String>,
+    parent: Option<Option<String>>,
 ) -> Result<Bean, String> {
     let existing = get_bean(project_path.clone(), bean_id.clone())?;
     let file_path_str = existing.file_path.clone();
@@ -152,6 +153,11 @@ pub fn update_bean(
     let new_tags = tags.unwrap_or(existing.tags.clone());
     let new_assignee = assignee.or(existing.assignee.clone());
     let new_body = body.unwrap_or(existing.body.clone());
+    // parent: Some(Some(id)) = set parent, Some(None) = clear parent, None = keep existing
+    let new_parent = match parent {
+        Some(p) => p,
+        None => existing.parent.clone(),
+    };
 
     let now = chrono_now_iso();
     let created_at = existing.created_at.as_deref().unwrap_or(&now).to_string();
@@ -167,7 +173,7 @@ pub fn update_bean(
         format!("tags:\n{}", tags_yaml)
     };
 
-    let parent_line = match &existing.parent {
+    let parent_line = match &new_parent {
         Some(p) => format!("parent: {}\n", p),
         None => String::new(),
     };
@@ -202,7 +208,7 @@ pub fn update_bean_status(
     bean_id: String,
     status: String,
 ) -> Result<Bean, String> {
-    update_bean(project_path, bean_id, None, Some(status), None, None, None)
+    update_bean(project_path, bean_id, None, Some(status), None, None, None, None)
 }
 
 // ── Search command (beanstalk-lmx4) ─────────────────────────────────────────
@@ -711,6 +717,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         assert!(result.is_ok(), "update_bean should succeed: {:?}", result);
@@ -731,6 +738,7 @@ mod tests {
             tmp.path().to_string_lossy().to_string(),
             "ghost-id-9999".to_string(),
             Some("New Title".to_string()),
+            None,
             None,
             None,
             None,
@@ -864,6 +872,7 @@ mod tests {
             project_path.clone(),
             bean.id.clone(),
             Some(tricky_title.to_string()),
+            None,
             None,
             None,
             None,

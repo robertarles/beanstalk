@@ -124,6 +124,7 @@ function App() {
           tags: fields.tags,
           assignee: fields.assignee,
           body: fields.body,
+          parent: fields.parent,
         });
         refresh();
         showToast('Bean saved', 'success');

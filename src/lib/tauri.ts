@@ -26,6 +26,7 @@ export const updateBean = (params: {
   tags?: string[];
   assignee?: string | null;
   body?: string;
+  parent?: string | null;
 }) => invoke<Bean>('update_bean', params);
 
 export const updateBeanStatus = (projectPath: string, beanId: string, status: string) =>

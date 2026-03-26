@@ -121,7 +121,7 @@ export const BeanDetail = memo(function BeanDetail({
     });
     setIsEditing(false);
     setIsDirty(false);
-  }, [bean, editTitle, editStatus, editTags, editAssignee, onSave]);
+  }, [bean, editTitle, editStatus, editTags, editAssignee, editParentId, onSave]);
 
   const handleOpenInEditor = useCallback(async () => {
     if (!bean) return;
