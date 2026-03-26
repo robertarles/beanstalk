@@ -15,7 +15,7 @@ const defaultProps = {
   onSelectProject: vi.fn(),
   onAddProject: vi.fn(() => Promise.resolve()),
   onRemoveProject: vi.fn(),
-  statusFilter: null,
+  statusFilter: [] as string[],
   onStatusFilter: vi.fn(),
   statuses: ['todo', 'in-progress', 'done'],
 }
@@ -58,9 +58,13 @@ describe('Sidebar', () => {
   it('shows status filter options', () => {
     render(<Sidebar {...defaultProps} />)
 
-    expect(screen.getByText('All')).toBeInTheDocument()
     expect(screen.getByText('todo')).toBeInTheDocument()
     expect(screen.getByText('in-progress')).toBeInTheDocument()
     expect(screen.getByText('done')).toBeInTheDocument()
+  })
+
+  it('shows All button when filters are active', () => {
+    render(<Sidebar {...defaultProps} statusFilter={['todo']} />)
+    expect(screen.getByText('All')).toBeInTheDocument()
   })
 })

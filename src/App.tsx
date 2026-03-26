@@ -11,7 +11,14 @@ import { BeanList } from './components/BeanList';
 import { BeanDetail } from './components/BeanDetail';
 import { Toast } from './components/Toast';
 
-const AVAILABLE_STATUSES = ['open', 'in-progress', 'done', 'archived'];
+/** Collect unique statuses from a bean tree. */
+function collectStatuses(beans: Bean[], out = new Set<string>()): string[] {
+  for (const b of beans) {
+    out.add(b.status);
+    if (b.children) collectStatuses(b.children, out);
+  }
+  return [...out].sort();
+}
 
 /** Recursively search a bean tree for a bean with the given id. */
 function findBeanById(beans: Bean[], id: string): Bean | null {
@@ -33,7 +40,7 @@ function App() {
   const { beans, loading: beansLoading, refresh, lastRefreshed } = useBeans(activeProject);
 
   const [selectedBeanId, setSelectedBeanId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const { toasts, showToast, dismissToast } = useToast();
 
@@ -55,7 +62,7 @@ function App() {
   // Derived state
   const selectedBean = selectedBeanId ? findBeanById(beans, selectedBeanId) ?? null : null;
 
-  const availableStatuses = AVAILABLE_STATUSES;
+  const availableStatuses = collectStatuses(beans);
 
   // Callbacks
   const handleSelectProject = useCallback(
@@ -185,7 +192,7 @@ function App() {
             onRemoveProject={handleRemoveProject}
             statusFilter={statusFilter}
             onStatusFilter={setStatusFilter}
-            statuses={AVAILABLE_STATUSES}
+            statuses={availableStatuses}
           />
         }
         list={
@@ -209,7 +216,7 @@ function App() {
           isCreating ? (
             <CreateBeanForm
               projectPath={activeProject ?? ''}
-              availableStatuses={AVAILABLE_STATUSES}
+              availableStatuses={availableStatuses}
               allBeans={beans}
               onCreated={(bean) => {
                 refresh();

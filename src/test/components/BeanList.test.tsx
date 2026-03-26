@@ -64,7 +64,7 @@ describe('BeanList', () => {
   })
 
   it('filters by statusFilter prop', () => {
-    render(<BeanList {...defaultProps} statusFilter="done" />)
+    render(<BeanList {...defaultProps} statusFilter={['done']} />)
     expect(screen.queryByText('Alpha Bean')).not.toBeInTheDocument()
     expect(screen.getByText('Beta Bean')).toBeInTheDocument()
     expect(screen.queryByText('Gamma Bean')).not.toBeInTheDocument()

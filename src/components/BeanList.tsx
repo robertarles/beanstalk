@@ -6,7 +6,7 @@ interface BeanListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   loading: boolean;
-  statusFilter?: string | null;
+  statusFilter?: string[];
   onNewBean?: () => void;
   lastRefreshed?: number;
 }
@@ -47,11 +47,12 @@ function flattenVisible(beans: Bean[], expanded: Map<string, boolean>, depth = 0
 }
 
 // --- Collect all beans with matching status (including children) ---
-function filterByStatus(beans: Bean[], status: string | null): Bean[] {
-  if (!status) return beans;
+function filterByStatus(beans: Bean[], statuses: string[]): Bean[] {
+  if (statuses.length === 0) return beans;
+  const lower = statuses.map((s) => s.toLowerCase());
   return beans.reduce<Bean[]>((acc, bean) => {
-    const filteredChildren = filterByStatus(bean.children ?? [], status);
-    if (bean.status.toLowerCase() === status.toLowerCase() || filteredChildren.length > 0) {
+    const filteredChildren = filterByStatus(bean.children ?? [], statuses);
+    if (lower.includes(bean.status.toLowerCase()) || filteredChildren.length > 0) {
       acc.push({ ...bean, children: filteredChildren });
     }
     return acc;
@@ -109,7 +110,7 @@ function SortArrow({ column, sort }: { column: SortColumn; sort: SortState }) {
 }
 
 // --- Main component ---
-export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = null, onNewBean, lastRefreshed }: BeanListProps) {
+export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], onNewBean, lastRefreshed }: BeanListProps) {
   const [sort, setSort] = useState<SortState>({ column: 'date', direction: 'desc' });
   const [expanded, setExpanded] = useState<Map<string, boolean>>(new Map());
   const [search, setSearch] = useState('');

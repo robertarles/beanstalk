@@ -10,8 +10,8 @@ interface SidebarProps {
   onAddProject?: (path: string) => Promise<void>;
   /** Called with the project path to remove after the user confirms inline. */
   onRemoveProject?: (path: string) => void;
-  statusFilter: string | null;
-  onStatusFilter: (s: string | null) => void;
+  statusFilter: string[];
+  onStatusFilter: (s: string[]) => void;
   statuses: string[];
 }
 
@@ -126,39 +126,51 @@ export const Sidebar = memo(function Sidebar({
 
       {/* Status filter section */}
       <div className="px-3 pb-4">
-        <div className="mb-1">
+        <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Status
           </span>
-        </div>
-
-        <ul className="space-y-0.5">
-          <li>
+          {statusFilter.length > 0 && (
             <button
-              onClick={() => onStatusFilter(null)}
-              className={[
-                'w-full text-left px-2 py-1.5 rounded transition-colors',
-                statusFilter === null
-                  ? 'bg-blue-500 text-white'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700',
-              ].join(' ')}
+              onClick={() => onStatusFilter([])}
+              className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
             >
               All
             </button>
-          </li>
+          )}
+        </div>
+
+        <ul className="space-y-0.5">
           {statuses.map((status) => {
-            const isActive = statusFilter === status;
+            const isActive = statusFilter.includes(status);
             return (
               <li key={status}>
                 <button
-                  onClick={() => onStatusFilter(status)}
+                  onClick={() => {
+                    if (isActive) {
+                      onStatusFilter(statusFilter.filter((s) => s !== status));
+                    } else {
+                      onStatusFilter([...statusFilter, status]);
+                    }
+                  }}
                   className={[
-                    'w-full text-left px-2 py-1.5 rounded transition-colors capitalize',
+                    'w-full text-left flex items-center gap-2 px-2 py-1.5 rounded transition-colors capitalize',
                     isActive
                       ? 'bg-blue-500 text-white'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700',
                   ].join(' ')}
                 >
+                  <span
+                    className={[
+                      'w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center text-xs',
+                      isActive
+                        ? 'border-white bg-white/20'
+                        : 'border-gray-400 dark:border-gray-500',
+                    ].join(' ')}
+                    aria-hidden="true"
+                  >
+                    {isActive && '✓'}
+                  </span>
                   {status}
                 </button>
               </li>
