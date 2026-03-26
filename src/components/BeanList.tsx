@@ -24,8 +24,8 @@ function statusDotClass(status: string): string {
   const s = status.toLowerCase();
   if (s === 'open') return 'bg-blue-500';
   if (s === 'in-progress' || s === 'in_progress' || s === 'inprogress') return 'bg-yellow-500';
-  if (s === 'done') return 'bg-green-500';
-  if (s === 'archived') return 'bg-gray-400';
+  if (s === 'completed' || s === 'done') return 'bg-green-500';
+  if (s === 'archived' || s === 'scrapped') return 'bg-gray-400';
   return 'bg-gray-400';
 }
 

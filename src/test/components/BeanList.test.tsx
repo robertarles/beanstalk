@@ -22,7 +22,7 @@ function makeBean(overrides: Partial<Bean> = {}): Bean {
 }
 
 const beanA = makeBean({ id: 'bean-001', title: 'Alpha Bean', status: 'open', file_path: '/project/.beans/bean-001.md' })
-const beanB = makeBean({ id: 'bean-002', title: 'Beta Bean', status: 'done', file_path: '/project/.beans/bean-002.md' })
+const beanB = makeBean({ id: 'bean-002', title: 'Beta Bean', status: 'completed', file_path: '/project/.beans/bean-002.md' })
 const beanC = makeBean({ id: 'bean-003', title: 'Gamma Bean', status: 'open', file_path: '/project/.beans/bean-003.md' })
 
 const defaultProps = {
@@ -64,7 +64,7 @@ describe('BeanList', () => {
   })
 
   it('filters by statusFilter prop', () => {
-    render(<BeanList {...defaultProps} statusFilter={['done']} />)
+    render(<BeanList {...defaultProps} statusFilter={['completed']} />)
     expect(screen.queryByText('Alpha Bean')).not.toBeInTheDocument()
     expect(screen.getByText('Beta Bean')).toBeInTheDocument()
     expect(screen.queryByText('Gamma Bean')).not.toBeInTheDocument()

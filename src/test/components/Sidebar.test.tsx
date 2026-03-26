@@ -17,7 +17,7 @@ const defaultProps = {
   onRemoveProject: vi.fn(),
   statusFilter: [] as string[],
   onStatusFilter: vi.fn(),
-  statuses: ['todo', 'in-progress', 'done'],
+  statuses: ['todo', 'in-progress', 'completed'],
 }
 
 describe('Sidebar', () => {
@@ -60,7 +60,7 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('todo')).toBeInTheDocument()
     expect(screen.getByText('in-progress')).toBeInTheDocument()
-    expect(screen.getByText('done')).toBeInTheDocument()
+    expect(screen.getByText('completed')).toBeInTheDocument()
   })
 
   it('shows All button when filters are active', () => {

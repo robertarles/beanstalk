@@ -25,7 +25,7 @@ const defaultProps = {
   bean: mockBean,
   onOpenInEditor: vi.fn(),
   onStatusChange: vi.fn(),
-  availableStatuses: ['open', 'in-progress', 'done', 'archived'],
+  availableStatuses: ['open', 'in-progress', 'completed', 'scrapped'],
   onSave: vi.fn(),
   projectPath: '/project',
 }
@@ -52,8 +52,8 @@ describe('BeanDetail', () => {
     const onStatusChange = vi.fn()
     render(<BeanDetail {...defaultProps} onStatusChange={onStatusChange} />)
     const select = screen.getByRole('combobox')
-    fireEvent.change(select, { target: { value: 'done' } })
-    expect(onStatusChange).toHaveBeenCalledWith('done')
+    fireEvent.change(select, { target: { value: 'completed' } })
+    expect(onStatusChange).toHaveBeenCalledWith('completed')
   })
 
   it('edit button switches to edit mode', () => {
@@ -114,13 +114,13 @@ describe('BeanDetail', () => {
     )
     expect(statusSelect).toBeDefined()
 
-    // Change status to 'done'.
-    fireEvent.change(statusSelect!, { target: { value: 'done' } })
+    // Change status to 'completed'.
+    fireEvent.change(statusSelect!, { target: { value: 'completed' } })
 
     fireEvent.click(screen.getByRole('button', { name: /^Save$/i }))
 
     expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'done' })
+      expect.objectContaining({ status: 'completed' })
     )
   })
 

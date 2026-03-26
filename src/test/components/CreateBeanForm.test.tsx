@@ -23,7 +23,7 @@ const mockCreatedBean: Bean = {
 
 const defaultProps = {
   projectPath: '/project',
-  availableStatuses: ['open', 'in-progress', 'done'],
+  availableStatuses: ['open', 'in-progress', 'completed'],
   allBeans: [],
   onCreated: vi.fn(),
   onCancel: vi.fn(),

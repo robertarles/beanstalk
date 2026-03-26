@@ -20,9 +20,11 @@ function statusBadgeClass(status: string): string {
     case 'in-progress':
     case 'in_progress':
       return 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
+    case 'completed':
     case 'done':
       return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
     case 'archived':
+    case 'scrapped':
       return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
     default:
       return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
