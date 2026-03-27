@@ -9,6 +9,17 @@ interface BeanListProps {
   statusFilter?: string[];
   onNewBean?: () => void;
   lastRefreshed?: number;
+  /**
+   * Keyboard-driven selected index (from useKeyboardNav). When set, the row
+   * at this index in the flat visible list is highlighted even if selectedId
+   * doesn't match yet (the two stay in sync via onFlatListChange).
+   */
+  keyboardSelectedIndex?: number;
+  /**
+   * Called whenever the flat visible list changes so the parent can keep an
+   * up-to-date index → id mapping for keyboard navigation.
+   */
+  onFlatListChange?: (ids: string[]) => void;
 }
 
 type SortColumn = 'title' | 'status' | 'date';
@@ -110,7 +121,7 @@ function SortArrow({ column, sort }: { column: SortColumn; sort: SortState }) {
 }
 
 // --- Main component ---
-export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], onNewBean, lastRefreshed }: BeanListProps) {
+export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange }: BeanListProps) {
   const [sort, setSort] = useState<SortState>({ column: 'date', direction: 'desc' });
   const [expanded, setExpanded] = useState<Map<string, boolean>>(new Map());
   const [search, setSearch] = useState('');
@@ -197,6 +208,15 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
 
   // Flatten with expand state
   const flatRows = useMemo(() => flattenVisible(sorted, expanded), [sorted, expanded]);
+
+  // Notify parent whenever the flat visible list changes (for keyboard nav index→id mapping)
+  const onFlatListChangeRef = useRef(onFlatListChange);
+  onFlatListChangeRef.current = onFlatListChange;
+  useEffect(() => {
+    if (onFlatListChangeRef.current) {
+      onFlatListChangeRef.current(flatRows.map((r) => r.bean.id));
+    }
+  }, [flatRows]);
 
   // Count totals
   const totalCount = useMemo(() => {
@@ -312,8 +332,10 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
         </div>
       ) : (
         <ul className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-          {flatRows.map(({ bean, depth }) => {
+          {flatRows.map(({ bean, depth }, rowIndex) => {
             const isSelected = !!bean.id && bean.id === selectedId;
+            const isKeyboardFocused =
+              keyboardSelectedIndex !== undefined && keyboardSelectedIndex === rowIndex;
             const hasChildren = bean.children && bean.children.length > 0;
             const isExpanded = !!expanded.get(bean.id);
 
@@ -325,7 +347,9 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
                     'w-full text-left flex items-center gap-1 pr-3 py-2 transition-colors',
                     isSelected
                       ? 'bg-blue-50 dark:bg-blue-950 border-l-2 border-blue-500 pl-2'
-                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 border-l-2 border-transparent pl-2',
+                      : isKeyboardFocused
+                        ? 'bg-gray-100 dark:bg-gray-800 border-l-2 border-gray-400 dark:border-gray-500 pl-2'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 border-l-2 border-transparent pl-2',
                   ].join(' ')}
                   style={{ paddingLeft: `${0.5 + depth * 1.5}rem` }}
                 >

@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import type { Bean } from './types/beans';
 import { updateBean, updateBeanStatus, startWatching, stopWatching } from './lib/tauri';
 import { CreateBeanForm } from './components/CreateBeanForm';
 import { useConfig } from './hooks/useConfig';
 import { useBeans } from './hooks/useBeans';
 import { useToast } from './hooks/useToast';
+import { useKeyboardNav } from './hooks/useKeyboardNav';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { BeanList } from './components/BeanList';
@@ -43,6 +44,33 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const { toasts, showToast, dismissToast } = useToast();
+
+  // Flat visible bean id list, kept in sync by BeanList via onFlatListChange
+  const flatBeanIdsRef = useRef<string[]>([]);
+
+  const handleFlatListChange = useCallback((ids: string[]) => {
+    flatBeanIdsRef.current = ids;
+  }, []);
+
+  // Keyboard navigation
+  const {
+    focusedPanel,
+    selectedBeanIndex,
+    setSelectedBeanIndex,
+  } = useKeyboardNav({
+    beanCount: flatBeanIdsRef.current.length,
+    onSelectIndex: (index) => {
+      if (index < 0) {
+        setSelectedBeanId(null);
+        return;
+      }
+      const id = flatBeanIdsRef.current[index];
+      if (id) {
+        setSelectedBeanId(id);
+        setIsCreating(false);
+      }
+    },
+  });
 
   // Start/stop watching when activeProject changes
   useEffect(() => {
@@ -147,7 +175,21 @@ function App() {
     // BeanDetail handles opening in editor internally
   }, []);
 
-  // Global keyboard shortcuts
+  // Sync selectedBeanIndex when selectedBeanId changes due to clicks
+  useEffect(() => {
+    if (selectedBeanId === null) {
+      // Only reset index if it isn't already -1 (avoid infinite loop)
+      setSelectedBeanIndex(-1);
+      return;
+    }
+    const idx = flatBeanIdsRef.current.indexOf(selectedBeanId);
+    if (idx >= 0) {
+      setSelectedBeanIndex(idx);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBeanId]);
+
+  // Global keyboard shortcuts (meta keys only; vim navigation handled by useKeyboardNav)
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const isMeta = e.metaKey || e.ctrlKey;
@@ -162,9 +204,8 @@ function App() {
       } else if (e.key === 'Escape') {
         if (isCreating) {
           setIsCreating(false);
-        } else {
-          setSelectedBeanId(null);
         }
+        // Note: Escape for deselecting is handled by useKeyboardNav's escape chain
       }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -183,6 +224,7 @@ function App() {
   return (
     <>
       <Layout
+        focusedPanel={focusedPanel}
         sidebar={
           <Sidebar
             projects={config?.projects ?? []}
@@ -210,6 +252,8 @@ function App() {
               setIsCreating(true);
               setSelectedBeanId(null);
             }}
+            keyboardSelectedIndex={selectedBeanIndex >= 0 ? selectedBeanIndex : undefined}
+            onFlatListChange={handleFlatListChange}
           />
         }
         detail={
