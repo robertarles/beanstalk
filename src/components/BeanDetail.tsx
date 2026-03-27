@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import type { Bean } from '../types/beans';
-import { openBeanInEditor } from '../lib/tauri';
+import { openBeanInEditor, openUrl } from '../lib/tauri';
+import { parseBodyWithLinks } from '../lib/markdown';
 import { ParentBeanSelect } from './ParentBeanSelect';
 
 interface BeanDetailProps {
@@ -302,6 +303,27 @@ export const BeanDetail = memo(function BeanDetail({
   }
 
   // --- VIEW MODE ---
+  function renderBody(body: string) {
+    return parseBodyWithLinks(body).map((segment, i) => {
+      if (segment.type === 'link') {
+        return (
+          <span
+            key={i}
+            className="text-blue-500 underline cursor-pointer hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 active:text-blue-700 transition-colors"
+            onClick={() => {
+              openUrl(segment.url).catch((error) => {
+                console.error('Failed to open URL:', segment.url, error);
+              });
+            }}
+          >
+            {segment.text}
+          </span>
+        );
+      }
+      return <span key={i}>{segment.text}</span>;
+    });
+  }
+
   const statusesForSelect = [...availableStatuses];
   if (!statusesForSelect.includes(bean.status)) {
     statusesForSelect.push(bean.status);
@@ -429,7 +451,7 @@ export const BeanDetail = memo(function BeanDetail({
       <div className="flex-1">
         {bean.body ? (
           <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-            {bean.body}
+            {renderBody(bean.body)}
           </pre>
         ) : (
           <span className="text-sm text-gray-400 dark:text-gray-600 italic">No description</span>

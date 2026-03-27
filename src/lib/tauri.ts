@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl as tauriOpenUrl } from '@tauri-apps/plugin-opener';
 import type { Bean, AppConfig } from '../types/beans';
 
 export const getBeans = (projectPath: string) =>
@@ -57,3 +58,5 @@ export const setActiveProject = (path: string) => invoke<AppConfig>('set_active_
 export const startWatching = (projectPath: string) => invoke<void>('start_watching', { projectPath });
 
 export const stopWatching = (projectPath: string) => invoke<void>('stop_watching', { projectPath });
+
+export const openUrl = (url: string): Promise<void> => tauriOpenUrl(url);
