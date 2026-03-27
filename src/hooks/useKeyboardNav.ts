@@ -229,26 +229,31 @@ export function useKeyboardNav({
     const unsub = tinykeys(document as unknown as Window, {
       j: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         selectNext();
       },
       k: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         selectPrevious();
       },
       h: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         focusLeft();
       },
       l: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         focusRight();
       },
       g: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         const { pendingKey } = stateRef.current;
         if (pendingKey === 'g') {
@@ -267,42 +272,55 @@ export function useKeyboardNav({
       },
       G: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         clearPendingKey();
         jumpToLast();
       },
+      '?': (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        event.preventDefault();
+        setState((s) => ({ ...s, isModalOpen: !s.isModalOpen }));
+      },
       '/': (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         focusSearch();
       },
       i: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         openInEditor();
       },
       e: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         enterEditMode();
       },
       n: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         newBean();
       },
       s: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         cycleStatus();
       },
       y: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         copyId();
       },
       'Control+f': (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         if (stateRef.current.focusedPanel !== 'detail') return;
         event.preventDefault();
         const aside = document.querySelector<HTMLElement>('[data-detail-panel]');
@@ -310,6 +328,7 @@ export function useKeyboardNav({
       },
       'Control+b': (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
         if (stateRef.current.focusedPanel !== 'detail') return;
         event.preventDefault();
         const aside = document.querySelector<HTMLElement>('[data-detail-panel]');

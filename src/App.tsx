@@ -11,6 +11,7 @@ import { Sidebar } from './components/Sidebar';
 import { BeanList } from './components/BeanList';
 import { BeanDetail } from './components/BeanDetail';
 import { Toast } from './components/Toast';
+import { KeyboardHelp } from './components/KeyboardHelp';
 
 /** Collect unique statuses from a bean tree. */
 function collectStatuses(beans: Bean[], out = new Set<string>()): string[] {
@@ -117,6 +118,8 @@ function App() {
     focusedPanel,
     selectedBeanIndex,
     setSelectedBeanIndex,
+    isModalOpen,
+    setIsModalOpen,
     registerEscapeHandler,
   } = useKeyboardNav({
     beanCount: flatBeanIdsRef.current.length,
@@ -348,6 +351,11 @@ function App() {
             />
           )
         }
+      />
+      {/* Keyboard help overlay */}
+      <KeyboardHelp
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
       />
       {/* Toast notifications */}
       <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
