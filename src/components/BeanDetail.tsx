@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import type { Bean } from '../types/beans';
 import { openBeanInEditor, openUrl } from '../lib/tauri';
 import { parseBodyWithLinks } from '../lib/markdown';
@@ -12,6 +12,10 @@ interface BeanDetailProps {
   allBeans?: Bean[];
   onSave?: (fields: Partial<Bean>) => void;
   projectPath?: string;
+  /** Register an Escape handler with the keyboard nav system. Priority 20 — cancels edit mode. */
+  registerEscapeHandler?: (priority: number, handler: () => boolean) => () => void;
+  /** Ref callback to expose handleEditStart to the parent. */
+  onEditStartRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 function statusBadgeClass(status: string): string {
@@ -57,6 +61,8 @@ export const BeanDetail = memo(function BeanDetail({
   allBeans = [],
   onSave = () => {},
   projectPath = '',
+  registerEscapeHandler,
+  onEditStartRef,
 }: BeanDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -152,6 +158,27 @@ export const BeanDetail = memo(function BeanDetail({
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__beanDetailConfirmDiscard = confirmDiscard;
   }, [confirmDiscard]);
+
+  // Register escape handler: when editing, Escape cancels edit mode (priority 20).
+  useEffect(() => {
+    if (!registerEscapeHandler || !isEditing) return;
+    return registerEscapeHandler(20, () => {
+      handleCancel();
+      return true;
+    });
+  }, [registerEscapeHandler, isEditing, handleCancel]);
+
+  // Expose handleEditStart to parent via ref so `e` key can trigger it.
+  useEffect(() => {
+    if (onEditStartRef) {
+      onEditStartRef.current = handleEditStart;
+    }
+    return () => {
+      if (onEditStartRef) {
+        onEditStartRef.current = null;
+      }
+    };
+  }, [onEditStartRef, handleEditStart]);
 
   if (!bean) {
     return (

@@ -9,6 +9,8 @@ interface CreateBeanFormProps {
   allBeans: Bean[];
   onCreated: (bean: Bean) => void;
   onCancel: () => void;
+  /** Register an Escape handler with the keyboard nav system. Priority 20. */
+  registerEscapeHandler?: (priority: number, handler: () => boolean) => () => void;
 }
 
 const BEAN_TYPES = ['task', 'epic', 'milestone'];
@@ -19,6 +21,7 @@ export function CreateBeanForm({
   allBeans,
   onCreated,
   onCancel,
+  registerEscapeHandler,
 }: CreateBeanFormProps) {
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState(availableStatuses.includes('open') ? 'open' : (availableStatuses[0] ?? ''));
@@ -38,8 +41,15 @@ export function CreateBeanForm({
     titleRef.current?.focus();
   }, []);
 
-  // Escape key cancels the form
+  // Escape key cancels the form — register with the escape chain (priority 20) when available,
+  // otherwise fall back to a raw listener for standalone use (e.g. tests).
   useEffect(() => {
+    if (registerEscapeHandler) {
+      return registerEscapeHandler(20, () => {
+        onCancel();
+        return true;
+      });
+    }
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         onCancel();
@@ -47,7 +57,7 @@ export function CreateBeanForm({
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel]);
+  }, [onCancel, registerEscapeHandler]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {

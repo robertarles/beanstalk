@@ -29,6 +29,16 @@ export interface UseKeyboardNavOptions {
   beanCount: number;
   /** Called when j/k navigation changes the selected index. */
   onSelectIndex: (index: number) => void;
+  /** Called when `i` is pressed — open selected bean in external editor. */
+  onOpenInEditor?: () => void;
+  /** Called when `e` is pressed — enter edit mode for selected bean. */
+  onEnterEditMode?: () => void;
+  /** Called when `n` is pressed — open the new-bean form. */
+  onNewBean?: () => void;
+  /** Called when `s` is pressed — cycle the selected bean's status. */
+  onCycleStatus?: () => void;
+  /** Called when `y` is pressed — copy selected bean ID to clipboard. */
+  onCopyId?: () => void;
 }
 
 export interface UseKeyboardNavResult {
@@ -53,6 +63,11 @@ export interface UseKeyboardNavResult {
 export function useKeyboardNav({
   beanCount,
   onSelectIndex,
+  onOpenInEditor,
+  onEnterEditMode,
+  onNewBean,
+  onCycleStatus,
+  onCopyId,
 }: UseKeyboardNavOptions): UseKeyboardNavResult {
   const [state, setState] = useState<KeyboardNavState>({
     focusedPanel: 'list',
@@ -71,6 +86,21 @@ export function useKeyboardNav({
 
   const onSelectIndexRef = useRef(onSelectIndex);
   onSelectIndexRef.current = onSelectIndex;
+
+  const onOpenInEditorRef = useRef(onOpenInEditor);
+  onOpenInEditorRef.current = onOpenInEditor;
+
+  const onEnterEditModeRef = useRef(onEnterEditMode);
+  onEnterEditModeRef.current = onEnterEditMode;
+
+  const onNewBeanRef = useRef(onNewBean);
+  onNewBeanRef.current = onNewBean;
+
+  const onCycleStatusRef = useRef(onCycleStatus);
+  onCycleStatusRef.current = onCycleStatus;
+
+  const onCopyIdRef = useRef(onCopyId);
+  onCopyIdRef.current = onCopyId;
 
   // Escape handler registry
   const escapeHandlersRef = useRef<EscapeHandler[]>([]);
@@ -119,6 +149,31 @@ export function useKeyboardNav({
     const last = total - 1;
     setState((s) => ({ ...s, selectedBeanIndex: last, focusedPanel: 'list' }));
     onSelectIndexRef.current(last);
+  }, []);
+
+  const focusSearch = useCallback(() => {
+    const input = document.querySelector<HTMLInputElement>('[data-search-input]');
+    input?.focus();
+  }, []);
+
+  const openInEditor = useCallback(() => {
+    onOpenInEditorRef.current?.();
+  }, []);
+
+  const enterEditMode = useCallback(() => {
+    onEnterEditModeRef.current?.();
+  }, []);
+
+  const newBean = useCallback(() => {
+    onNewBeanRef.current?.();
+  }, []);
+
+  const cycleStatus = useCallback(() => {
+    onCycleStatusRef.current?.();
+  }, []);
+
+  const copyId = useCallback(() => {
+    onCopyIdRef.current?.();
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -216,6 +271,50 @@ export function useKeyboardNav({
         clearPendingKey();
         jumpToLast();
       },
+      '/': (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        event.preventDefault();
+        focusSearch();
+      },
+      i: (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        event.preventDefault();
+        openInEditor();
+      },
+      e: (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        event.preventDefault();
+        enterEditMode();
+      },
+      n: (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        event.preventDefault();
+        newBean();
+      },
+      s: (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        event.preventDefault();
+        cycleStatus();
+      },
+      y: (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        event.preventDefault();
+        copyId();
+      },
+      'Control+f': (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        if (stateRef.current.focusedPanel !== 'detail') return;
+        event.preventDefault();
+        const aside = document.querySelector<HTMLElement>('[data-detail-panel]');
+        if (aside) aside.scrollBy({ top: window.innerHeight / 2, behavior: 'smooth' });
+      },
+      'Control+b': (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        if (stateRef.current.focusedPanel !== 'detail') return;
+        event.preventDefault();
+        const aside = document.querySelector<HTMLElement>('[data-detail-panel]');
+        if (aside) aside.scrollBy({ top: -(window.innerHeight / 2), behavior: 'smooth' });
+      },
       Escape: (event: KeyboardEvent) => {
         // Allow Escape to propagate from inputs (let them handle it) but also
         // run our chain so modal/edit layers can close.
@@ -230,7 +329,7 @@ export function useKeyboardNav({
         clearTimeout(pendingKeyTimerRef.current);
       }
     };
-  }, [selectNext, selectPrevious, focusLeft, focusRight, jumpToFirst, jumpToLast, handleEscape]);
+  }, [selectNext, selectPrevious, focusLeft, focusRight, jumpToFirst, jumpToLast, handleEscape, focusSearch, openInEditor, enterEditMode, newBean, cycleStatus, copyId]);
 
   // ---------------------------------------------------------------------------
   // Stable setters

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { Bean } from './types/beans';
-import { updateBean, updateBeanStatus, startWatching, stopWatching } from './lib/tauri';
+import { updateBean, updateBeanStatus, openBeanInEditor, startWatching, stopWatching } from './lib/tauri';
 import { CreateBeanForm } from './components/CreateBeanForm';
 import { useConfig } from './hooks/useConfig';
 import { useBeans } from './hooks/useBeans';
@@ -52,11 +52,72 @@ function App() {
     flatBeanIdsRef.current = ids;
   }, []);
 
+  // Ref to expose BeanDetail's handleEditStart to the keyboard `e` handler
+  const beanDetailEditStartRef = useRef<(() => void) | null>(null);
+
+  // Refs so keyboard callbacks always see current values
+  const selectedBeanIdRef = useRef(selectedBeanId);
+  selectedBeanIdRef.current = selectedBeanId;
+  const activeProjectRef = useRef(activeProject);
+  activeProjectRef.current = activeProject;
+  const beansRef = useRef(beans);
+  beansRef.current = beans;
+
+  const handleKbOpenInEditor = useCallback(async () => {
+    const beanId = selectedBeanIdRef.current;
+    const project = activeProjectRef.current;
+    if (!beanId || !project) return;
+    try {
+      await openBeanInEditor(project, beanId);
+    } catch (e) {
+      console.error('Failed to open bean in editor:', e);
+    }
+  }, []);
+
+  const handleKbEnterEditMode = useCallback(() => {
+    beanDetailEditStartRef.current?.();
+  }, []);
+
+  const handleKbNewBean = useCallback(() => {
+    setIsCreating(true);
+    setSelectedBeanId(null);
+  }, []);
+
+  const handleKbCycleStatus = useCallback(() => {
+    const beanId = selectedBeanIdRef.current;
+    const project = activeProjectRef.current;
+    if (!beanId || !project) return;
+    const currentBeans = beansRef.current;
+    const bean = findBeanById(currentBeans, beanId);
+    if (!bean) return;
+    const statuses = collectStatuses(currentBeans);
+    if (statuses.length === 0) return;
+    const currentIdx = statuses.indexOf(bean.status);
+    const nextStatus = statuses[(currentIdx + 1) % statuses.length];
+    updateBeanStatus(project, beanId, nextStatus)
+      .then(() => refresh())
+      .catch((err) => {
+        console.error('Failed to cycle status:', err);
+        showToast(err instanceof Error ? err.message : 'Failed to update status', 'error');
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh, showToast]);
+
+  const handleKbCopyId = useCallback(() => {
+    const beanId = selectedBeanIdRef.current;
+    if (!beanId) return;
+    navigator.clipboard.writeText(beanId).catch((err) => {
+      console.error('Failed to copy bean ID:', err);
+    });
+    showToast('Copied bean ID', 'success');
+  }, [showToast]);
+
   // Keyboard navigation
   const {
     focusedPanel,
     selectedBeanIndex,
     setSelectedBeanIndex,
+    registerEscapeHandler,
   } = useKeyboardNav({
     beanCount: flatBeanIdsRef.current.length,
     onSelectIndex: (index) => {
@@ -70,7 +131,13 @@ function App() {
         setIsCreating(false);
       }
     },
+    onOpenInEditor: handleKbOpenInEditor,
+    onEnterEditMode: handleKbEnterEditMode,
+    onNewBean: handleKbNewBean,
+    onCycleStatus: handleKbCycleStatus,
+    onCopyId: handleKbCopyId,
   });
+
 
   // Start/stop watching when activeProject changes
   useEffect(() => {
@@ -201,16 +268,12 @@ function App() {
         e.preventDefault();
         const searchInput = document.querySelector<HTMLInputElement>('[data-search-input]');
         searchInput?.focus();
-      } else if (e.key === 'Escape') {
-        if (isCreating) {
-          setIsCreating(false);
-        }
-        // Note: Escape for deselecting is handled by useKeyboardNav's escape chain
       }
+      // Note: Escape is handled entirely by useKeyboardNav's escape chain
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCreating]);
+  }, []);
 
   // Loading spinner while config is not yet loaded
   if (config === null && configLoading) {
@@ -254,6 +317,7 @@ function App() {
             }}
             keyboardSelectedIndex={selectedBeanIndex >= 0 ? selectedBeanIndex : undefined}
             onFlatListChange={handleFlatListChange}
+            registerEscapeHandler={registerEscapeHandler}
           />
         }
         detail={
@@ -268,6 +332,7 @@ function App() {
                 setIsCreating(false);
               }}
               onCancel={() => setIsCreating(false)}
+              registerEscapeHandler={registerEscapeHandler}
             />
           ) : (
             <BeanDetail
@@ -278,6 +343,8 @@ function App() {
               availableStatuses={availableStatuses}
               allBeans={beans}
               projectPath={activeProject ?? undefined}
+              registerEscapeHandler={registerEscapeHandler}
+              onEditStartRef={beanDetailEditStartRef}
             />
           )
         }

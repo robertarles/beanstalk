@@ -33,7 +33,7 @@ export function Layout({ sidebar, list, detail, focusedPanel }: LayoutProps) {
         </main>
 
         {/* Bean Detail */}
-        <aside className={['overflow-y-auto overflow-x-hidden bg-white dark:bg-gray-950', focusRing('detail', focusedPanel)].join(' ')}>
+        <aside data-detail-panel className={['overflow-y-auto overflow-x-hidden bg-white dark:bg-gray-950', focusRing('detail', focusedPanel)].join(' ')}>
           {detail}
         </aside>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, memo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import type { Bean } from '../types/beans';
 
 interface BeanListProps {
@@ -20,6 +20,11 @@ interface BeanListProps {
    * up-to-date index → id mapping for keyboard navigation.
    */
   onFlatListChange?: (ids: string[]) => void;
+  /**
+   * Register an Escape handler with the keyboard nav system.
+   * Priority 10 — clears search and blurs the search input.
+   */
+  registerEscapeHandler?: (priority: number, handler: () => boolean) => () => void;
 }
 
 type SortColumn = 'title' | 'status' | 'date';
@@ -121,7 +126,7 @@ function SortArrow({ column, sort }: { column: SortColumn; sort: SortState }) {
 }
 
 // --- Main component ---
-export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange }: BeanListProps) {
+export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler }: BeanListProps) {
   const [sort, setSort] = useState<SortState>({ column: 'date', direction: 'desc' });
   const [expanded, setExpanded] = useState<Map<string, boolean>>(new Map());
   const [search, setSearch] = useState('');
@@ -129,6 +134,23 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showUpdated, setShowUpdated] = useState(false);
   const updatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Register escape handler: when search is focused & non-empty, Escape clears and blurs it.
+  const handleSearchEscape = useCallback((): boolean => {
+    const input = searchInputRef.current ?? document.querySelector<HTMLInputElement>('[data-search-input]');
+    if (input && document.activeElement === input) {
+      setSearch('');
+      input.blur();
+      return true;
+    }
+    return false;
+  }, []);
+
+  useEffect(() => {
+    if (!registerEscapeHandler) return;
+    return registerEscapeHandler(10, handleSearchEscape);
+  }, [registerEscapeHandler, handleSearchEscape]);
 
   // Show the "Updated" indicator whenever lastRefreshed changes (but not on initial mount)
   const prevLastRefreshed = useRef<number | undefined>(undefined);
@@ -279,6 +301,7 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
       <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
         <div className="relative">
           <input
+            ref={searchInputRef}
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
