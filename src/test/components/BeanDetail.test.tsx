@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { BeanDetail } from '../../components/BeanDetail'
 import type { Bean } from '../../types/beans'
+import { openUrl as mockOpenUrl } from '@tauri-apps/plugin-opener'
 
 // openBeanInEditor is imported in BeanDetail via ../lib/tauri which calls invoke
 // Since invoke is already mocked globally in setup.ts, this will be a no-op
@@ -141,5 +142,46 @@ describe('BeanDetail', () => {
         status: mockBean.status, // original status preserved
       })
     )
+  })
+
+  // ── Link rendering ──────────────────────────────────────────────────────────
+
+  it('renders plain body text without clickable links', () => {
+    render(<BeanDetail {...defaultProps} />)
+    expect(screen.getByText('This is the bean body.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /http/i })).not.toBeInTheDocument()
+  })
+
+  it('renders a markdown link as a clickable span', () => {
+    const beanWithLink: Bean = { ...mockBean, body: 'See [docs](https://example.com) here' }
+    render(<BeanDetail {...defaultProps} bean={beanWithLink} />)
+    const link = screen.getByText('docs')
+    expect(link.tagName).toBe('SPAN')
+    expect(link.className).toContain('cursor-pointer')
+  })
+
+  it('clicking a link calls openUrl with the correct URL', () => {
+    const beanWithLink: Bean = { ...mockBean, body: '[click me](https://example.com)' }
+    render(<BeanDetail {...defaultProps} bean={beanWithLink} />)
+    fireEvent.click(screen.getByText('click me'))
+    expect(mockOpenUrl).toHaveBeenCalledWith('https://example.com')
+  })
+
+  it('renders multiple links as separate clickable spans', () => {
+    const beanWithLinks: Bean = {
+      ...mockBean,
+      body: '[a](https://a.com) and [b](https://b.com)',
+    }
+    render(<BeanDetail {...defaultProps} bean={beanWithLinks} />)
+    expect(screen.getByText('a').className).toContain('cursor-pointer')
+    expect(screen.getByText('b').className).toContain('cursor-pointer')
+  })
+
+  it('does not render non-HTTP scheme links as clickable', () => {
+    const beanWithBadLink: Bean = { ...mockBean, body: '[bad](javascript:xss)' }
+    render(<BeanDetail {...defaultProps} bean={beanWithBadLink} />)
+    // The entire link text should be rendered as plain text, not a clickable span
+    const el = screen.getByText('[bad](javascript:xss)')
+    expect(el.className).not.toContain('cursor-pointer')
   })
 })

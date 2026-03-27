@@ -1,14 +1,14 @@
 ---
 # beanstalk-sbhl
 title: Update BeanDetail component styling for link hover states
-status: todo
+status: completed
 type: epic
 priority: low
 tags:
     - master
     - tm_id:10
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:35Z
+updated_at: 2026-03-27T13:00:23Z
 parent: beanstalk-rcdr
 blocked_by:
     - beanstalk-w0s4

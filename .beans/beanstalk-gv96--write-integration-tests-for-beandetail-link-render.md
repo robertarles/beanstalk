@@ -1,14 +1,14 @@
 ---
 # beanstalk-gv96
 title: Write integration tests for BeanDetail link rendering
-status: todo
+status: completed
 type: epic
 priority: normal
 tags:
     - master
     - tm_id:9
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:35Z
+updated_at: 2026-03-27T13:00:22Z
 parent: beanstalk-rcdr
 blocked_by:
     - beanstalk-w0s4

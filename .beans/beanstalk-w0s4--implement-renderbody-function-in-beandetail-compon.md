@@ -1,14 +1,14 @@
 ---
 # beanstalk-w0s4
 title: Implement renderBody function in BeanDetail component
-status: todo
+status: completed
 type: epic
 priority: high
 tags:
     - master
     - tm_id:6
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:35Z
+updated_at: 2026-03-27T12:59:47Z
 parent: beanstalk-rcdr
 blocked_by:
     - beanstalk-nhoe

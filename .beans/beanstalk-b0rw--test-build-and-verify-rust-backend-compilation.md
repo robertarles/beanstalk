@@ -1,12 +1,13 @@
 ---
 # beanstalk-b0rw
 title: 'Test: Build and verify Rust backend compilation'
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - tm_id:5.testStrategy
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:34Z
+updated_at: 2026-03-27T12:58:58Z
 parent: beanstalk-fe3k
 blocked_by:
     - beanstalk-7tv0

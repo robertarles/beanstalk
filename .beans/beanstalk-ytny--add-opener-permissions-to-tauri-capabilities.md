@@ -1,14 +1,14 @@
 ---
 # beanstalk-ytny
 title: Add opener permissions to Tauri capabilities
-status: in-progress
+status: completed
 type: epic
 priority: high
 tags:
     - master
     - tm_id:3
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:53:50Z
+updated_at: 2026-03-27T12:58:08Z
 parent: beanstalk-rcdr
 ---
 

@@ -1,14 +1,14 @@
 ---
 # beanstalk-dypj
 title: Implement markdown link parser utility
-status: in-progress
+status: completed
 type: epic
 priority: normal
 tags:
     - master
     - tm_id:5
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:53:50Z
+updated_at: 2026-03-27T12:58:17Z
 parent: beanstalk-rcdr
 ---
 

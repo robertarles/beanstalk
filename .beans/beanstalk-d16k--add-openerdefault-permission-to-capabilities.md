@@ -1,13 +1,14 @@
 ---
 # beanstalk-d16k
 title: Add opener:default permission to capabilities
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:2
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:34Z
+updated_at: 2026-03-27T12:58:08Z
 parent: beanstalk-ytny
 ---
 

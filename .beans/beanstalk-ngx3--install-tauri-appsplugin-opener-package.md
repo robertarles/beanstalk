@@ -1,14 +1,14 @@
 ---
 # beanstalk-ngx3
 title: Install @tauri-apps/plugin-opener package
-status: in-progress
+status: completed
 type: epic
 priority: high
 tags:
     - master
     - tm_id:1
 created_at: 2026-03-27T12:51:33Z
-updated_at: 2026-03-27T12:53:50Z
+updated_at: 2026-03-27T12:58:01Z
 parent: beanstalk-rcdr
 ---
 

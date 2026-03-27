@@ -1,12 +1,13 @@
 ---
 # beanstalk-mcfo
 title: 'Test: Test openUrl function in running application'
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - tm_id:4.testStrategy
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:34Z
+updated_at: 2026-03-27T12:58:58Z
 parent: beanstalk-0jbw
 blocked_by:
     - beanstalk-cvid

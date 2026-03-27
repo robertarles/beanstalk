@@ -1,14 +1,14 @@
 ---
 # beanstalk-i9df
 title: Add active state Tailwind class to link spans
-status: todo
+status: completed
 type: task
 priority: normal
 tags:
     - master
     - tm_id:3
 created_at: 2026-03-27T12:51:35Z
-updated_at: 2026-03-27T12:51:35Z
+updated_at: 2026-03-27T12:59:47Z
 parent: beanstalk-sbhl
 blocked_by:
     - beanstalk-8s9f

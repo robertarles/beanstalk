@@ -1,13 +1,14 @@
 ---
 # beanstalk-y0qj
 title: Import tauri_plugin_opener in lib.rs
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:2
 created_at: 2026-03-27T12:51:33Z
-updated_at: 2026-03-27T12:51:33Z
+updated_at: 2026-03-27T12:58:04Z
 parent: beanstalk-fe3k
 ---
 

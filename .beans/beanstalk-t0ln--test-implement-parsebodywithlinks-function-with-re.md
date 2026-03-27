@@ -1,12 +1,13 @@
 ---
 # beanstalk-t0ln
 title: 'Test: Implement parseBodyWithLinks function with regex parsing'
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - tm_id:2.testStrategy
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:34Z
+updated_at: 2026-03-27T12:58:58Z
 parent: beanstalk-dypj
 blocked_by:
     - beanstalk-137w

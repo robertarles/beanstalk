@@ -1,14 +1,14 @@
 ---
 # beanstalk-eyhw
 title: Write unit tests for markdown link parser
-status: todo
+status: completed
 type: epic
 priority: normal
 tags:
     - master
     - tm_id:8
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:35Z
+updated_at: 2026-03-27T12:59:16Z
 parent: beanstalk-rcdr
 blocked_by:
     - beanstalk-7yu7

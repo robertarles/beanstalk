@@ -1,14 +1,14 @@
 ---
 # beanstalk-fe3k
 title: Configure Rust backend with opener plugin
-status: in-progress
+status: completed
 type: epic
 priority: high
 tags:
     - master
     - tm_id:2
 created_at: 2026-03-27T12:51:33Z
-updated_at: 2026-03-27T12:53:50Z
+updated_at: 2026-03-27T12:58:04Z
 parent: beanstalk-rcdr
 ---
 

@@ -1,14 +1,14 @@
 ---
 # beanstalk-66xf
 title: Add error handling for openUrl calls
-status: todo
+status: completed
 type: epic
 priority: normal
 tags:
     - master
     - tm_id:7
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:35Z
+updated_at: 2026-03-27T13:00:22Z
 parent: beanstalk-rcdr
 blocked_by:
     - beanstalk-w0s4

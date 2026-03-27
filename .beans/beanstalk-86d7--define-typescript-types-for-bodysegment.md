@@ -1,13 +1,14 @@
 ---
 # beanstalk-86d7
 title: Define TypeScript types for BodySegment
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:1
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:34Z
+updated_at: 2026-03-27T12:58:17Z
 parent: beanstalk-dypj
 ---
 

@@ -1,12 +1,13 @@
 ---
 # beanstalk-fnqu
 title: 'Test: Add active state Tailwind class to link spans'
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - tm_id:3.testStrategy
 created_at: 2026-03-27T12:51:35Z
-updated_at: 2026-03-27T12:51:35Z
+updated_at: 2026-03-27T13:00:22Z
 parent: beanstalk-sbhl
 blocked_by:
     - beanstalk-i9df

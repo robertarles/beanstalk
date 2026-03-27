@@ -1,13 +1,14 @@
 ---
 # beanstalk-t5vd
 title: Verify package exports are accessible
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:5
 created_at: 2026-03-27T12:51:33Z
-updated_at: 2026-03-27T12:51:33Z
+updated_at: 2026-03-27T12:58:01Z
 parent: beanstalk-ngx3
 ---
 

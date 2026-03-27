@@ -1,13 +1,14 @@
 ---
 # beanstalk-7tv0
 title: Build and verify Rust backend compilation
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:5
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:34Z
+updated_at: 2026-03-27T12:58:04Z
 parent: beanstalk-fe3k
 ---
 

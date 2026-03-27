@@ -1,13 +1,14 @@
 ---
 # beanstalk-hn03
 title: Include URL value in error log message
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:2
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:34Z
+updated_at: 2026-03-27T12:58:54Z
 parent: beanstalk-66xf
 ---
 

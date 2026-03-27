@@ -1,12 +1,13 @@
 ---
 # beanstalk-tl8j
 title: 'Test: Set up test file and write basic test cases for parseBodyWithLinks'
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - tm_id:1.testStrategy
 created_at: 2026-03-27T12:51:34Z
-updated_at: 2026-03-27T12:51:34Z
+updated_at: 2026-03-27T12:59:19Z
 parent: beanstalk-eyhw
 blocked_by:
     - beanstalk-2mvd
