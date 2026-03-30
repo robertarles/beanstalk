@@ -20,4 +20,5 @@ test:
 # Install the app to /Applications (macOS)
 install: build
 	cd src-tauri && cargo tauri build
+	rm -rf /Applications/Beanstalk.app
 	cp -r src-tauri/target/release/bundle/macos/Beanstalk.app /Applications/Beanstalk.app
