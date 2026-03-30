@@ -1,9 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-// tinykeys package.json "exports" lacks a "types" condition, so we import
-// from the explicit dist path to satisfy TypeScript's module resolver.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — resolved correctly at runtime; types live at dist/tinykeys.d.ts
-import { tinykeys } from 'tinykeys/dist/tinykeys.js';
+import { tinykeys } from 'tinykeys';
 import type { FocusedPanel, KeyboardNavState, EscapeHandler } from '../types/keyboard';
 import { moveFocusLeft, moveFocusRight, nextIndex, prevIndex } from '../types/keyboard';
 
