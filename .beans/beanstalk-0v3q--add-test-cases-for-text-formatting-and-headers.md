@@ -1,13 +1,14 @@
 ---
 # beanstalk-0v3q
 title: Add test cases for text formatting and headers
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:1
 created_at: 2026-03-30T13:57:14Z
-updated_at: 2026-03-30T13:57:14Z
+updated_at: 2026-03-30T15:34:06Z
 parent: beanstalk-lirh
 ---
 
@@ -22,3 +23,5 @@ Add test cases to src/test/components/BeanDetail.test.tsx:
 4. Strikethrough test: Render bean with '~~text~~' body, verify <del> tag exists
 
 Each test should use render() from @testing-library/react, pass a mock bean with the markdown body, and use screen.getByRole() or container.querySelector() to verify element presence.
+
+## Summary of Changes\n\nTest cases for text formatting (bold, italic, strikethrough) and headers (h1, h2) added.

@@ -484,6 +484,23 @@ export const BeanDetail = memo(function BeanDetail({
                   </pre>
                 ),
                 input: (props) => <input {...props} readOnly />,
+                table: ({children}) => (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700">
+                      {children}
+                    </table>
+                  </div>
+                ),
+                th: ({children}) => (
+                  <th className="border border-gray-200 dark:border-gray-700 px-3 py-2 bg-gray-50 dark:bg-gray-800 text-left text-sm font-semibold">
+                    {children}
+                  </th>
+                ),
+                td: ({children}) => (
+                  <td className="border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm">
+                    {children}
+                  </td>
+                ),
               }}
             >
               {bean.body}

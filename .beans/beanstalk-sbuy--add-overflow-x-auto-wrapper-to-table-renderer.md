@@ -1,13 +1,14 @@
 ---
 # beanstalk-sbuy
 title: Add overflow-x-auto wrapper to table renderer
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:2
 created_at: 2026-03-30T13:57:15Z
-updated_at: 2026-03-30T13:57:15Z
+updated_at: 2026-03-30T15:33:30Z
 parent: beanstalk-tx5n
 ---
 
@@ -25,3 +26,5 @@ table: ({children}) => (
 )
 ```
 This ensures tables with many columns scroll horizontally without breaking the layout.
+
+## Summary of Changes\n\nAdded table renderer with overflow-x-auto wrapper div in BeanDetail.tsx ReactMarkdown components.

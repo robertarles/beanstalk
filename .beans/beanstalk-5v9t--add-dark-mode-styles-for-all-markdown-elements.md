@@ -1,14 +1,14 @@
 ---
 # beanstalk-5v9t
 title: Add dark mode styles for all markdown elements
-status: todo
+status: completed
 type: epic
 priority: normal
 tags:
     - master
     - tm_id:8
 created_at: 2026-03-30T13:57:15Z
-updated_at: 2026-03-30T13:57:16Z
+updated_at: 2026-03-30T15:33:37Z
 parent: beanstalk-64n0
 blocked_by:
     - beanstalk-agdz
@@ -37,3 +37,5 @@ The `prose-invert` class handles most dark mode styling automatically. Add custo
   .prose th, .prose td { @apply border-gray-700; }
 }
 ```
+
+## Summary of Changes\n\nDark mode styles handled via Tailwind dark: classes on all custom renderers.

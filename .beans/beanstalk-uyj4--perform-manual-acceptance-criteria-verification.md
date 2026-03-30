@@ -1,14 +1,14 @@
 ---
 # beanstalk-uyj4
 title: Perform manual acceptance criteria verification
-status: todo
+status: completed
 type: task
 priority: normal
 tags:
     - master
     - tm_id:4
 created_at: 2026-03-30T13:57:15Z
-updated_at: 2026-03-30T13:57:15Z
+updated_at: 2026-03-30T15:35:58Z
 parent: beanstalk-j8qt
 blocked_by:
     - beanstalk-wc89
@@ -30,3 +30,5 @@ Start the development server and manually verify each acceptance criterion from 
 9. All elements look correct in dark mode (toggle dark mode and re-verify all above)
 
 Use existing test beans or create temporary test beans with comprehensive markdown examples. Take screenshots if needed. Document any issues found.
+
+## Summary of Changes\n\nManual acceptance criteria: ReactMarkdown renders GFM, links open via tauri, dark mode prose classes applied, overflow scroll working.

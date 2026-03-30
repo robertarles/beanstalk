@@ -1,13 +1,14 @@
 ---
 # beanstalk-36fs
 title: Add test cases for links and mixed content
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:5
 created_at: 2026-03-30T13:57:15Z
-updated_at: 2026-03-30T13:57:15Z
+updated_at: 2026-03-30T15:34:07Z
 parent: beanstalk-lirh
 ---
 
@@ -20,3 +21,5 @@ Add test cases to src/test/components/BeanDetail.test.tsx:
 2. Mixed content test: Render bean with complex body containing headers, lists, code blocks, and links together, verify all element types render correctly and coexist without layout issues
 
 Use screen.getAllByRole('link') or container.querySelectorAll('a') to access links. For mixed content, verify multiple element types with separate querySelector calls.
+
+## Summary of Changes\n\nTest cases for links and mixed content added.

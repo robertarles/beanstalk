@@ -1,14 +1,14 @@
 ---
 # beanstalk-rgii
 title: Update BeanDetail component tests for markdown rendering
-status: todo
+status: completed
 type: epic
 priority: high
 tags:
     - master
     - tm_id:6
 created_at: 2026-03-30T13:57:14Z
-updated_at: 2026-03-30T13:57:16Z
+updated_at: 2026-03-30T15:34:07Z
 parent: beanstalk-64n0
 blocked_by:
     - beanstalk-uyj4
@@ -36,3 +36,5 @@ In src/test/components/BeanDetail.test.tsx:
    - GFM task list checkbox renders as <input type="checkbox" readOnly>
 
 Key testing approach: Use semantic queries (getByRole, getByText) and verify element types and classes rather than exact DOM structure.
+
+## Summary of Changes\n\nBeanDetail component tests updated for ReactMarkdown - link rendering tests updated and smoke tests added.

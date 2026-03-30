@@ -185,3 +185,96 @@ describe('BeanDetail', () => {
     expect(el.className).not.toContain('cursor-pointer')
   })
 })
+
+// ── Markdown rendering smoke tests ─────────────────────────────────────────
+
+describe('BeanDetail markdown rendering', () => {
+  it('renders h2 heading', () => {
+    const bean = { ...mockBean, body: '## My Heading' }
+    render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument()
+    expect(screen.getByText('My Heading')).toBeInTheDocument()
+  })
+
+  it('renders bold text', () => {
+    const bean = { ...mockBean, body: '**bold text**' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(container.querySelector('strong')).toBeInTheDocument()
+  })
+
+  it('renders italic text', () => {
+    const bean = { ...mockBean, body: '*italic text*' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(container.querySelector('em')).toBeInTheDocument()
+  })
+
+  it('renders inline code with pill styling', () => {
+    const bean = { ...mockBean, body: 'use `npm install` to install' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    const code = container.querySelector('code')
+    expect(code).toBeInTheDocument()
+    expect(code!.className).toContain('bg-gray-100')
+  })
+
+  it('renders fenced code block with dark background', () => {
+    const bean = { ...mockBean, body: '```\nconsole.log("hello")\n```' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    const pre = container.querySelector('pre')
+    expect(pre).toBeInTheDocument()
+    expect(pre!.className).toContain('bg-gray-900')
+  })
+
+  it('renders unordered list', () => {
+    const bean = { ...mockBean, body: '- item one\n- item two' }
+    render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(screen.getByRole('list')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('renders ordered list', () => {
+    const bean = { ...mockBean, body: '1. first\n2. second' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(container.querySelector('ol')).toBeInTheDocument()
+  })
+
+  it('renders blockquote', () => {
+    const bean = { ...mockBean, body: '> a quote' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(container.querySelector('blockquote')).toBeInTheDocument()
+  })
+
+  it('renders horizontal rule', () => {
+    const bean = { ...mockBean, body: 'above\n\n---\n\nbelow' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(container.querySelector('hr')).toBeInTheDocument()
+  })
+
+  it('renders GFM table', () => {
+    const bean = { ...mockBean, body: '| A | B |\n|---|---|\n| 1 | 2 |' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(container.querySelector('table')).toBeInTheDocument()
+    expect(container.querySelector('th')).toBeInTheDocument()
+    expect(container.querySelector('td')).toBeInTheDocument()
+  })
+
+  it('renders GFM task list checkboxes', () => {
+    const bean = { ...mockBean, body: '- [ ] todo\n- [x] done' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]')
+    expect(checkboxes.length).toBe(2)
+  })
+
+  it('renders GFM strikethrough', () => {
+    const bean = { ...mockBean, body: '~~strikethrough~~' }
+    const { container } = render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(container.querySelector('del')).toBeInTheDocument()
+  })
+
+  it('renders mixed content without errors', () => {
+    const body = `# Title\n\nSome **bold** and *italic* text.\n\n- item 1\n- item 2\n\n\`\`\`\ncode block\n\`\`\`\n\nSee [docs](https://example.com) for more.`
+    const bean = { ...mockBean, body }
+    render(<BeanDetail {...defaultProps} bean={bean} />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Title' })).toBeInTheDocument()
+    expect(screen.getByText('docs')).toBeInTheDocument()
+  })
+})
