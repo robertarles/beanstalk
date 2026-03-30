@@ -1,13 +1,14 @@
 ---
 # beanstalk-qov7
 title: 'Update imports: add ReactMarkdown, remarkGfm, isAllowedUrl; remove parseBodyWithLinks'
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:1
 created_at: 2026-03-30T13:57:14Z
-updated_at: 2026-03-30T13:57:14Z
+updated_at: 2026-03-30T14:13:03Z
 parent: beanstalk-h23q
 ---
 
@@ -22,3 +23,5 @@ At the top of src/components/BeanDetail.tsx:
 4. Remove: the parseBodyWithLinks import (no longer needed)
 
 Ensure all imports are organized cleanly. This prepares the file for the ReactMarkdown implementation without breaking existing functionality until the next steps are complete.
+
+## Summary of Changes\n\nUpdated imports in BeanDetail.tsx: added ReactMarkdown, remarkGfm, isAllowedUrl; removed parseBodyWithLinks.

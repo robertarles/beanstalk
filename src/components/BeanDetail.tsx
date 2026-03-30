@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import type { Bean } from '../types/beans';
 import { openBeanInEditor, openUrl } from '../lib/tauri';
-import { parseBodyWithLinks } from '../lib/markdown';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { isAllowedUrl } from '../lib/markdown';
 import { ParentBeanSelect } from './ParentBeanSelect';
 
 interface BeanDetailProps {
@@ -329,28 +331,6 @@ export const BeanDetail = memo(function BeanDetail({
     );
   }
 
-  // --- VIEW MODE ---
-  function renderBody(body: string) {
-    return parseBodyWithLinks(body).map((segment, i) => {
-      if (segment.type === 'link') {
-        return (
-          <span
-            key={i}
-            className="text-blue-500 underline cursor-pointer hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 active:text-blue-700 transition-colors"
-            onClick={() => {
-              openUrl(segment.url).catch((error) => {
-                console.error('Failed to open URL:', segment.url, error);
-              });
-            }}
-          >
-            {segment.text}
-          </span>
-        );
-      }
-      return <span key={i}>{segment.text}</span>;
-    });
-  }
-
   const statusesForSelect = [...availableStatuses];
   if (!statusesForSelect.includes(bean.status)) {
     statusesForSelect.push(bean.status);
@@ -477,9 +457,38 @@ export const BeanDetail = memo(function BeanDetail({
       {/* Body */}
       <div className="flex-1">
         {bean.body ? (
-          <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-            {renderBody(bean.body)}
-          </pre>
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                a: ({href, children}) => (
+                  href && isAllowedUrl(href) ? (
+                    <span
+                      className="text-blue-500 underline cursor-pointer hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 active:text-blue-700 transition-colors"
+                      onClick={() => openUrl(href).catch(console.error)}
+                    >
+                      {children}
+                    </span>
+                  ) : (
+                    <span>{children}</span>
+                  )
+                ),
+                code: ({className, children}) => (
+                  <code className={`${className || ''} px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-sm font-mono text-gray-800 dark:text-gray-200`}>
+                    {children}
+                  </code>
+                ),
+                pre: ({children}) => (
+                  <pre className="p-3 rounded bg-gray-900 dark:bg-gray-950 overflow-x-auto [&>code]:bg-transparent">
+                    {children}
+                  </pre>
+                ),
+                input: (props) => <input {...props} readOnly />,
+              }}
+            >
+              {bean.body}
+            </ReactMarkdown>
+          </div>
         ) : (
           <span className="text-sm text-gray-400 dark:text-gray-600 italic">No description</span>
         )}

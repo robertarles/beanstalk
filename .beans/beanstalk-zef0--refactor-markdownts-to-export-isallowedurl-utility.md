@@ -1,14 +1,14 @@
 ---
 # beanstalk-zef0
 title: Refactor markdown.ts to export isAllowedUrl utility
-status: todo
+status: completed
 type: epic
 priority: high
 tags:
     - master
     - tm_id:2
 created_at: 2026-03-30T13:57:14Z
-updated_at: 2026-03-30T13:57:14Z
+updated_at: 2026-03-30T14:11:00Z
 parent: beanstalk-64n0
 ---
 
@@ -27,3 +27,5 @@ Final file should contain:
 - isAllowedUrl function (exported)
 
 This simplification is possible because react-markdown handles all parsing internally.
+
+## Summary of Changes\n\nRefactored markdown.ts to remove BodySegment type and parseBodyWithLinks function, and export isAllowedUrl function.

@@ -1,13 +1,14 @@
 ---
 # beanstalk-o5km
 title: Update existing link rendering tests for ReactMarkdown DOM structure
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:1
 created_at: 2026-03-30T13:57:14Z
-updated_at: 2026-03-30T13:57:14Z
+updated_at: 2026-03-30T14:13:09Z
 parent: beanstalk-rgii
 ---
 
@@ -29,3 +30,5 @@ Update the test cases in src/test/components/BeanDetail.test.tsx lines 155-186:
    - Ensure no onClick handler is attached to invalid links
 
 Use Testing Library semantic queries (getByText, getByRole) and verify element types, classes, and event handlers rather than exact DOM structure.
+
+## Summary of Changes\n\nUpdated existing link rendering test in BeanDetail.test.tsx for ReactMarkdown DOM structure.

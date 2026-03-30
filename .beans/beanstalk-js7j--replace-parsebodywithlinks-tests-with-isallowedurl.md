@@ -1,13 +1,14 @@
 ---
 # beanstalk-js7j
 title: Replace parseBodyWithLinks tests with isAllowedUrl tests
-status: todo
+status: completed
 type: epic
+priority: normal
 tags:
     - master
     - tm_id:3
 created_at: 2026-03-30T13:57:14Z
-updated_at: 2026-03-30T13:57:14Z
+updated_at: 2026-03-30T14:13:12Z
 parent: beanstalk-64n0
 ---
 
@@ -27,3 +28,5 @@ In src/test/lib/markdown.test.ts:
    - Returns false for empty string
 
 These tests validate the security boundary that prevents non-HTTP schemes from being clickable.
+
+## Summary of Changes\n\nReplaced parseBodyWithLinks tests with isAllowedUrl tests in markdown.test.ts and updated BeanDetail link test.

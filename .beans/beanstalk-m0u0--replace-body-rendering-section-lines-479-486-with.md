@@ -1,13 +1,14 @@
 ---
 # beanstalk-m0u0
 title: Replace body rendering section (lines 479-486) with ReactMarkdown component
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - master
     - tm_id:3
 created_at: 2026-03-30T13:57:14Z
-updated_at: 2026-03-30T13:57:14Z
+updated_at: 2026-03-30T14:13:04Z
 parent: beanstalk-h23q
 ---
 
@@ -26,3 +27,5 @@ In src/components/BeanDetail.tsx, replace the body rendering section (lines 479-
 7. Fallback for empty body: italic gray text "No description"
 
 Critical: Link renderer must never output <a> tags for security. All styling must match existing patterns.
+
+## Summary of Changes\n\nReplaced body rendering section with ReactMarkdown component in BeanDetail.tsx.

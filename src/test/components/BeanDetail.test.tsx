@@ -181,7 +181,7 @@ describe('BeanDetail', () => {
     const beanWithBadLink: Bean = { ...mockBean, body: '[bad](javascript:xss)' }
     render(<BeanDetail {...defaultProps} bean={beanWithBadLink} />)
     // The entire link text should be rendered as plain text, not a clickable span
-    const el = screen.getByText('[bad](javascript:xss)')
+    const el = screen.getByText('bad')
     expect(el.className).not.toContain('cursor-pointer')
   })
 })

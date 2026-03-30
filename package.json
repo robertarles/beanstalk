@@ -16,6 +16,8 @@
     "@tauri-apps/plugin-opener": "^2.5.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tinykeys": "^3.0.0"
   },
   "devDependencies": {
