@@ -45,6 +45,17 @@ function statusDotClass(status: string): string {
   return 'bg-gray-400';
 }
 
+// --- Priority badge color helper ---
+function priorityBadgeClass(priority: string | null): string {
+  switch (priority?.toLowerCase()) {
+    case 'critical': return 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400';
+    case 'high':     return 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-400';
+    case 'low':      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-400';
+    case 'deferred': return 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500';
+    default:         return '';
+  }
+}
+
 // --- Flatten beans tree into rows with depth ---
 interface FlatBean {
   bean: Bean;
@@ -362,12 +373,14 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
             const hasChildren = bean.children && bean.children.length > 0;
             const isExpanded = !!expanded.get(bean.id);
 
+            const showPriorityBadge = bean.priority && bean.priority.toLowerCase() !== 'normal';
+
             return (
               <li key={bean.file_path || `${bean.id}-${depth}`}>
                 <button
                   onClick={() => onSelect(bean.id)}
                   className={[
-                    'w-full text-left flex items-center gap-1 pr-3 py-2 transition-colors',
+                    'w-full text-left flex flex-col pr-3 py-1.5 transition-colors',
                     isSelected
                       ? 'bg-blue-50 dark:bg-blue-950 border-l-2 border-blue-500 pl-2'
                       : isKeyboardFocused
@@ -376,51 +389,78 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
                   ].join(' ')}
                   style={{ paddingLeft: `${0.5 + depth * 1.5}rem` }}
                 >
-                  {/* Chevron */}
-                  <span
-                    className="w-4 shrink-0 flex items-center justify-center"
-                    onClick={
-                      hasChildren
-                        ? (e) => {
-                            e.stopPropagation();
-                            toggleExpand(bean.id);
-                          }
-                        : undefined
-                    }
-                  >
-                    {hasChildren && <Chevron expanded={isExpanded} />}
-                  </span>
+                  {/* Top row */}
+                  <div className="flex items-center gap-1 w-full">
+                    {/* Chevron */}
+                    <span
+                      className="w-4 shrink-0 flex items-center justify-center"
+                      onClick={
+                        hasChildren
+                          ? (e) => {
+                              e.stopPropagation();
+                              toggleExpand(bean.id);
+                            }
+                          : undefined
+                      }
+                    >
+                      {hasChildren && <Chevron expanded={isExpanded} />}
+                    </span>
 
-                  {/* Status dot */}
-                  <span
-                    className={[
-                      'w-2 h-2 rounded-full shrink-0',
-                      statusDotClass(bean.status),
-                    ].join(' ')}
-                    title={bean.status}
-                  />
+                    {/* Status dot */}
+                    <span
+                      className={[
+                        'w-2 h-2 rounded-full shrink-0',
+                        statusDotClass(bean.status),
+                      ].join(' ')}
+                      title={bean.status}
+                    />
 
-                  {/* Title */}
-                  <span
-                    className={[
-                      'flex-1 text-sm font-medium truncate ml-1.5',
-                      isSelected
-                        ? 'text-blue-900 dark:text-blue-100'
-                        : 'text-gray-900 dark:text-gray-100',
-                    ].join(' ')}
-                  >
-                    {bean.title || '(untitled)'}
-                  </span>
+                    {/* Title */}
+                    <span
+                      className={[
+                        'flex-1 text-sm font-medium truncate ml-1.5',
+                        isSelected
+                          ? 'text-blue-900 dark:text-blue-100'
+                          : 'text-gray-900 dark:text-gray-100',
+                      ].join(' ')}
+                    >
+                      {bean.title || '(untitled)'}
+                    </span>
 
-                  {/* Status label (muted, fixed width) */}
-                  <span className="w-20 text-xs text-gray-400 dark:text-gray-500 truncate capitalize shrink-0">
-                    {bean.status}
-                  </span>
+                    {/* Status label (muted, fixed width) */}
+                    <span className="w-20 text-xs text-gray-400 dark:text-gray-500 truncate capitalize shrink-0">
+                      {bean.status}
+                    </span>
 
-                  {/* Date (muted, fixed width, right-aligned) */}
-                  <span className="w-24 text-xs text-gray-400 dark:text-gray-500 text-right shrink-0">
-                    {formatDate(bean.created_at)}
-                  </span>
+                    {/* Date (muted, fixed width, right-aligned) */}
+                    <span className="w-24 text-xs text-gray-400 dark:text-gray-500 text-right shrink-0">
+                      {formatDate(bean.created_at)}
+                    </span>
+                  </div>
+
+                  {/* Sub-row: priority badge + tags (only when non-normal priority or tags exist) */}
+                  {(showPriorityBadge || bean.tags.length > 0) && (
+                    <div className="flex items-center gap-1 flex-wrap pl-7 mt-0.5">
+                      {showPriorityBadge && (
+                        <span className={`text-[10px] px-1 rounded font-medium leading-4 shrink-0 capitalize ${priorityBadgeClass(bean.priority)}`}>
+                          {bean.priority}
+                        </span>
+                      )}
+                      {bean.tags.slice(0, 3).map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-[10px] px-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 leading-4 truncate max-w-[80px]"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                      {bean.tags.length > 3 && (
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                          +{bean.tags.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </button>
               </li>
             );

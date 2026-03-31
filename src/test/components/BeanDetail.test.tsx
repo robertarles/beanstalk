@@ -14,6 +14,7 @@ const mockBean: Bean = {
   bean_type: 'task',
   parent: null,
   tags: ['bug', 'frontend'],
+  priority: null,
   assignee: 'alice',
   created_at: '2024-03-01T00:00:00Z',
   updated_at: '2024-03-15T00:00:00Z',

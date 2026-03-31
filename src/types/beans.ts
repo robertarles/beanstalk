@@ -5,6 +5,7 @@ export interface Bean {
   bean_type: string;
   parent: string | null;
   tags: string[];
+  priority: string | null;
   assignee: string | null;
   created_at: string | null;
   updated_at: string | null;

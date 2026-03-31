@@ -17,6 +17,7 @@ pub struct Bean {
     pub bean_type: String, // "task", "epic", "milestone"
     pub parent: Option<String>,
     pub tags: Vec<String>,
+    pub priority: Option<String>,
     pub assignee: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
@@ -194,6 +195,7 @@ pub fn parse_bean_file(path: &Path) -> Result<Bean> {
         bean_type,
         parent: get_opt_str("parent"),
         tags,
+        priority: get_opt_str("priority"),
         assignee: get_opt_str("assignee"),
         created_at: get_opt_str("created_at"),
         updated_at: get_opt_str("updated_at"),
@@ -424,6 +426,7 @@ mod tests {
             bean_type: "task".to_string(),
             parent: parent.map(|s| s.to_string()),
             tags: vec![],
+            priority: None,
             assignee: None,
             created_at: None,
             updated_at: None,

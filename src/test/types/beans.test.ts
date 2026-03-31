@@ -11,6 +11,7 @@ describe('Bean interface', () => {
       bean_type: 'task',
       parent: null,
       tags: ['test'],
+      priority: null,
       assignee: 'alice',
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-02T00:00:00Z',

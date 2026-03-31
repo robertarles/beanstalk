@@ -153,6 +153,7 @@ pub fn update_bean(
     let new_tags = tags.unwrap_or(existing.tags.clone());
     let new_assignee = assignee.or(existing.assignee.clone());
     let new_body = body.unwrap_or(existing.body.clone());
+    let new_priority = existing.priority.clone();
     // parent: Some(Some(id)) = set parent, Some(None) = clear parent, None = keep existing
     let new_parent = match parent {
         Some(p) => p,
@@ -181,13 +182,18 @@ pub fn update_bean(
         Some(a) => format!("assignee: {}\n", a),
         None => String::new(),
     };
+    let priority_line = match &new_priority {
+        Some(p) => format!("priority: {}\n", p),
+        None => String::new(),
+    };
 
     let content = format!(
-        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}\ncreated_at: {}\nupdated_at: {}\n---\n{}",
+        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}\ncreated_at: {}\nupdated_at: {}\n---\n{}",
         existing.id,
         yaml_quote_str(&new_title),
         new_status,
         existing.bean_type,
+        priority_line,
         parent_line,
         assignee_line,
         tags_block,
