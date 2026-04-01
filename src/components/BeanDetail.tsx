@@ -71,6 +71,7 @@ export const BeanDetail = memo(function BeanDetail({
   const [editStatus, setEditStatus] = useState('');
   const [editTags, setEditTags] = useState('');
   const [editAssignee, setEditAssignee] = useState('');
+  const [editPriority, setEditPriority] = useState<string>('');
   const [editParentId, setEditParentId] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [isOpeningEditor, setIsOpeningEditor] = useState(false);
@@ -82,6 +83,7 @@ export const BeanDetail = memo(function BeanDetail({
       setEditStatus(bean.status || '');
       setEditTags((bean.tags || []).join(', '));
       setEditAssignee(bean.assignee || '');
+      setEditPriority(bean.priority || '');
       setEditParentId(bean.parent ?? null);
     }
     setIsEditing(false);
@@ -97,6 +99,7 @@ export const BeanDetail = memo(function BeanDetail({
       editStatus !== (bean.status || '') ||
       editTags !== originalTags ||
       editAssignee !== (bean.assignee || '') ||
+      editPriority !== (bean.priority || '') ||
       editParentId !== (bean.parent ?? null);
     setIsDirty(dirty);
   }, [editTitle, editStatus, editTags, editAssignee, editParentId, bean, isEditing]);
@@ -107,6 +110,7 @@ export const BeanDetail = memo(function BeanDetail({
     setEditStatus(bean.status || '');
     setEditTags((bean.tags || []).join(', '));
     setEditAssignee(bean.assignee || '');
+    setEditPriority(bean.priority || '');
     setEditParentId(bean.parent ?? null);
     setIsDirty(false);
     setIsEditing(true);
@@ -128,6 +132,7 @@ export const BeanDetail = memo(function BeanDetail({
       status: editStatus,
       tags: tagsArray,
       assignee: editAssignee || null,
+      priority: editPriority || null,
       parent: editParentId ?? undefined,
     });
     setIsEditing(false);
@@ -253,6 +258,25 @@ export const BeanDetail = memo(function BeanDetail({
             {!availableStatuses.includes(editStatus) && editStatus && (
               <option value={editStatus}>{editStatus}</option>
             )}
+          </select>
+        </div>
+
+        {/* Priority */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            Priority
+          </label>
+          <select
+            value={editPriority}
+            onChange={(e) => setEditPriority(e.target.value)}
+            className="text-sm px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">— none —</option>
+            <option value="critical">critical</option>
+            <option value="high">high</option>
+            <option value="normal">normal</option>
+            <option value="low">low</option>
+            <option value="deferred">deferred</option>
           </select>
         </div>
 
@@ -409,6 +433,16 @@ export const BeanDetail = memo(function BeanDetail({
           </svg>
         </div>
       </div>
+
+      {/* Priority */}
+      {bean.priority && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20 shrink-0">
+            Priority
+          </span>
+          <span className="text-sm text-gray-700 dark:text-gray-300 capitalize">{bean.priority}</span>
+        </div>
+      )}
 
       {/* Assignee */}
       {bean.assignee && (

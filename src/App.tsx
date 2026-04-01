@@ -230,6 +230,7 @@ function App() {
           assignee: fields.assignee,
           body: fields.body,
           parent: fields.parent,
+          priority: fields.priority,
         });
         refresh();
         showToast('Bean saved', 'success');

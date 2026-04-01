@@ -143,6 +143,7 @@ pub fn update_bean(
     assignee: Option<String>,
     body: Option<String>,
     parent: Option<Option<String>>,
+    priority: Option<Option<String>>,
 ) -> Result<Bean, String> {
     let existing = get_bean(project_path.clone(), bean_id.clone())?;
     let file_path_str = existing.file_path.clone();
@@ -153,7 +154,11 @@ pub fn update_bean(
     let new_tags = tags.unwrap_or(existing.tags.clone());
     let new_assignee = assignee.or(existing.assignee.clone());
     let new_body = body.unwrap_or(existing.body.clone());
-    let new_priority = existing.priority.clone();
+    // priority: Some(Some(p)) = set, Some(None) = clear, None = keep existing
+    let new_priority = match priority {
+        Some(p) => p,
+        None => existing.priority.clone(),
+    };
     // parent: Some(Some(id)) = set parent, Some(None) = clear parent, None = keep existing
     let new_parent = match parent {
         Some(p) => p,
@@ -214,7 +219,7 @@ pub fn update_bean_status(
     bean_id: String,
     status: String,
 ) -> Result<Bean, String> {
-    update_bean(project_path, bean_id, None, Some(status), None, None, None, None)
+    update_bean(project_path, bean_id, None, Some(status), None, None, None, None, None)
 }
 
 // ── Search command (beanstalk-lmx4) ─────────────────────────────────────────
@@ -724,6 +729,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         assert!(result.is_ok(), "update_bean should succeed: {:?}", result);
@@ -744,6 +750,7 @@ mod tests {
             tmp.path().to_string_lossy().to_string(),
             "ghost-id-9999".to_string(),
             Some("New Title".to_string()),
+            None,
             None,
             None,
             None,
@@ -878,6 +885,7 @@ mod tests {
             project_path.clone(),
             bean.id.clone(),
             Some(tricky_title.to_string()),
+            None,
             None,
             None,
             None,
