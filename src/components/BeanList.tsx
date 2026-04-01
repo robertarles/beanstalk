@@ -7,6 +7,7 @@ interface BeanListProps {
   onSelect: (id: string) => void;
   loading: boolean;
   statusFilter?: string[];
+  tagFilter?: string[];
   onNewBean?: () => void;
   lastRefreshed?: number;
   /**
@@ -86,6 +87,33 @@ function filterByStatus(beans: Bean[], statuses: string[]): Bean[] {
   }, []);
 }
 
+// --- Collect all unique tags across the full bean tree, sorted ---
+export function collectTags(beans: Bean[]): string[] {
+  const tags = new Set<string>();
+  const visit = (list: Bean[]) => {
+    for (const bean of list) {
+      for (const tag of bean.tags ?? []) tags.add(tag);
+      if (bean.children?.length) visit(bean.children);
+    }
+  };
+  visit(beans);
+  return Array.from(tags).sort();
+}
+
+// --- Filter beans to those possessing ALL active tags (AND logic) ---
+export function filterByTags(beans: Bean[], tags: string[]): Bean[] {
+  if (tags.length === 0) return beans;
+  return beans.reduce<Bean[]>((acc, bean) => {
+    const filteredChildren = filterByTags(bean.children ?? [], tags);
+    const beanTags = bean.tags ?? [];
+    const matches = tags.every((t) => beanTags.includes(t));
+    if (matches || filteredChildren.length > 0) {
+      acc.push({ ...bean, children: filteredChildren });
+    }
+    return acc;
+  }, []);
+}
+
 // --- Sort top-level beans ---
 function sortBeans(beans: Bean[], sort: SortState): Bean[] {
   return [...beans].sort((a, b) => {
@@ -137,7 +165,7 @@ function SortArrow({ column, sort }: { column: SortColumn; sort: SortState }) {
 }
 
 // --- Main component ---
-export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler }: BeanListProps) {
+export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], tagFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler }: BeanListProps) {
   const [sort, setSort] = useState<SortState>({ column: 'date', direction: 'desc' });
   const [expanded, setExpanded] = useState<Map<string, boolean>>(new Map());
   const [search, setSearch] = useState('');
@@ -212,10 +240,13 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
   // Apply status filter
   const statusFiltered = useMemo(() => filterByStatus(beans, statusFilter), [beans, statusFilter]);
 
+  // Apply tag filter
+  const tagFiltered = useMemo(() => filterByTags(statusFiltered, tagFilter), [statusFiltered, tagFilter]);
+
   // Apply search filter (client-side, title + id match)
   const searchFiltered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
-    if (!q) return statusFiltered;
+    if (!q) return tagFiltered;
     function matchBean(bean: Bean): Bean | null {
       const titleMatch = (bean.title || '').toLowerCase().includes(q);
       const idMatch = bean.id.toLowerCase().includes(q);
@@ -229,12 +260,12 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
       }
       return null;
     }
-    return statusFiltered.reduce<Bean[]>((acc, bean) => {
+    return tagFiltered.reduce<Bean[]>((acc, bean) => {
       const m = matchBean(bean);
       if (m) acc.push(m);
       return acc;
     }, []);
-  }, [statusFiltered, debouncedSearch]);
+  }, [tagFiltered, debouncedSearch]);
 
   // Sort top-level beans
   const sorted = useMemo(() => sortBeans(searchFiltered, sort), [searchFiltered, sort]);
@@ -256,8 +287,8 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
     function countAll(bs: Bean[]): number {
       return bs.reduce((n, b) => n + 1 + countAll(b.children ?? []), 0);
     }
-    return countAll(statusFiltered);
-  }, [statusFiltered]);
+    return countAll(tagFiltered);
+  }, [tagFiltered]);
 
   const filteredCount = useMemo(() => {
     function countAll(bs: Bean[]): number {

@@ -5,7 +5,6 @@ import { ParentBeanSelect } from './ParentBeanSelect';
 
 interface CreateBeanFormProps {
   projectPath: string;
-  availableStatuses: string[];
   allBeans: Bean[];
   onCreated: (bean: Bean) => void;
   onCancel: () => void;
@@ -14,17 +13,17 @@ interface CreateBeanFormProps {
 }
 
 const BEAN_TYPES = ['task', 'epic', 'milestone'];
+const BEAN_STATUSES = ['todo', 'in-progress', 'completed', 'scrapped', 'draft'];
 
 export function CreateBeanForm({
   projectPath,
-  availableStatuses,
   allBeans,
   onCreated,
   onCancel,
   registerEscapeHandler,
 }: CreateBeanFormProps) {
   const [title, setTitle] = useState('');
-  const [status, setStatus] = useState(availableStatuses.includes('open') ? 'open' : (availableStatuses[0] ?? ''));
+  const [status, setStatus] = useState('todo');
   const [beanType, setBeanType] = useState('task');
   const [parentId, setParentId] = useState<string | null>(null);
   const [tags, setTags] = useState('');
@@ -168,7 +167,7 @@ export function CreateBeanForm({
             onChange={(e) => setStatus(e.target.value)}
             className={inputClass}
           >
-            {availableStatuses.map((s) => (
+            {BEAN_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>

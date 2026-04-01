@@ -24,7 +24,6 @@ const mockCreatedBean: Bean = {
 
 const defaultProps = {
   projectPath: '/project',
-  availableStatuses: ['open', 'in-progress', 'completed'],
   allBeans: [],
   onCreated: vi.fn(),
   onCancel: vi.fn(),
@@ -110,7 +109,6 @@ describe('CreateBeanForm', () => {
     render(
       <CreateBeanForm
         {...defaultProps}
-        availableStatuses={['open', 'in-progress', 'done']}
         onCreated={onCreated}
       />
     )

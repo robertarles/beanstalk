@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { BeanList } from '../../components/BeanList'
+import { BeanList, collectTags, filterByTags } from '../../components/BeanList'
 import type { Bean } from '../../types/beans'
 
 function makeBean(overrides: Partial<Bean> = {}): Bean {
@@ -122,5 +122,69 @@ describe('BeanList', () => {
 
     // Child should now be visible
     expect(screen.getByText('Child Bean')).toBeInTheDocument()
+  })
+})
+
+// ── collectTags ─────────────────────────────────────────────────────────────
+
+describe('collectTags', () => {
+  it('returns empty array for beans with no tags', () => {
+    const beans = [makeBean({ tags: [] }), makeBean({ id: 'bean-002', tags: [] })]
+    expect(collectTags(beans)).toEqual([])
+  })
+
+  it('collects and deduplicates tags across beans', () => {
+    const beans = [
+      makeBean({ tags: ['bug', 'frontend'] }),
+      makeBean({ id: 'bean-002', tags: ['bug', 'backend'] }),
+    ]
+    expect(collectTags(beans)).toEqual(['backend', 'bug', 'frontend'])
+  })
+
+  it('collects tags from nested children', () => {
+    const child = makeBean({ id: 'child-001', tags: ['nested'] })
+    const parent = makeBean({ tags: ['top'], children: [child] })
+    expect(collectTags([parent])).toEqual(['nested', 'top'])
+  })
+})
+
+// ── filterByTags ─────────────────────────────────────────────────────────────
+
+describe('filterByTags', () => {
+  it('returns all beans when filter is empty', () => {
+    const beans = [makeBean({ tags: ['bug'] }), makeBean({ id: 'bean-002', tags: [] })]
+    expect(filterByTags(beans, [])).toHaveLength(2)
+  })
+
+  it('filters to beans matching a single tag', () => {
+    const beans = [
+      makeBean({ id: 'bean-001', tags: ['bug'] }),
+      makeBean({ id: 'bean-002', tags: ['feature'] }),
+    ]
+    expect(filterByTags(beans, ['bug'])).toHaveLength(1)
+    expect(filterByTags(beans, ['bug'])[0].id).toBe('bean-001')
+  })
+
+  it('applies AND logic — bean must have all active tags', () => {
+    const beans = [
+      makeBean({ id: 'bean-001', tags: ['bug', 'frontend'] }),
+      makeBean({ id: 'bean-002', tags: ['bug'] }),
+    ]
+    const result = filterByTags(beans, ['bug', 'frontend'])
+    expect(result).toHaveLength(1)
+    expect(result[0].id).toBe('bean-001')
+  })
+
+  it('keeps parent when child matches filter', () => {
+    const child = makeBean({ id: 'child-001', tags: ['bug'], file_path: '/project/.beans/child-001.md' })
+    const parent = makeBean({ id: 'parent-001', tags: [], children: [child], file_path: '/project/.beans/parent-001.md' })
+    const result = filterByTags([parent], ['bug'])
+    expect(result).toHaveLength(1)
+    expect(result[0].children).toHaveLength(1)
+  })
+
+  it('excludes beans with no matching tags', () => {
+    const beans = [makeBean({ tags: ['frontend'] })]
+    expect(filterByTags(beans, ['bug'])).toHaveLength(0)
   })
 })

@@ -12,13 +12,15 @@ interface BeanDetailProps {
   onStatusChange: (status: string) => void;
   availableStatuses: string[];
   allBeans?: Bean[];
-  onSave?: (fields: Partial<Bean>) => void;
+  onSave?: (fields: Partial<Bean>) => void | Promise<void>;
   projectPath?: string;
   /** Register an Escape handler with the keyboard nav system. Priority 20 — cancels edit mode. */
   registerEscapeHandler?: (priority: number, handler: () => boolean) => () => void;
   /** Ref callback to expose handleEditStart to the parent. */
   onEditStartRef?: React.MutableRefObject<(() => void) | null>;
 }
+
+const BEAN_STATUSES = ['todo', 'in-progress', 'completed', 'scrapped', 'draft'];
 
 function statusBadgeClass(status: string): string {
   switch (status.toLowerCase()) {
@@ -74,6 +76,7 @@ export const BeanDetail = memo(function BeanDetail({
   const [editPriority, setEditPriority] = useState<string>('');
   const [editParentId, setEditParentId] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isOpeningEditor, setIsOpeningEditor] = useState(false);
 
   // Reset edit state whenever the bean changes
@@ -121,22 +124,27 @@ export const BeanDetail = memo(function BeanDetail({
     setIsDirty(false);
   }, []);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!bean) return;
     const tagsArray = editTags
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
-    onSave?.({
-      title: editTitle,
-      status: editStatus,
-      tags: tagsArray,
-      assignee: editAssignee || null,
-      priority: editPriority || null,
-      parent: editParentId ?? undefined,
-    });
-    setIsEditing(false);
-    setIsDirty(false);
+    setIsSaving(true);
+    try {
+      await onSave?.({
+        title: editTitle,
+        status: editStatus,
+        tags: tagsArray,
+        assignee: editAssignee || null,
+        priority: editPriority || null,
+        parent: editParentId ?? undefined,
+      });
+      setIsEditing(false);
+      setIsDirty(false);
+    } finally {
+      setIsSaving(false);
+    }
   }, [bean, editTitle, editStatus, editTags, editAssignee, editParentId, onSave]);
 
   const handleOpenInEditor = useCallback(async () => {
@@ -203,7 +211,13 @@ export const BeanDetail = memo(function BeanDetail({
       .filter(Boolean);
 
     return (
-      <div className="flex flex-col h-full p-6 gap-4 overflow-y-auto">
+      <div className="relative flex flex-col h-full p-6 gap-4 overflow-y-auto">
+        {/* Saving overlay */}
+        {isSaving && (
+          <div className="absolute inset-0 z-10 bg-white/75 dark:bg-gray-950/75 flex items-center justify-center rounded">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Saving…</span>
+          </div>
+        )}
         {/* Toolbar */}
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -212,15 +226,17 @@ export const BeanDetail = memo(function BeanDetail({
           <div className="flex items-center gap-2">
             <button
               onClick={handleCancel}
-              className="text-xs px-3 py-1.5 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              disabled={isSaving}
+              className="text-xs px-3 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="text-xs px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+              disabled={isSaving}
+              className="text-xs px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors disabled:opacity-60"
             >
-              Save
+              {isSaving ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>
@@ -250,12 +266,12 @@ export const BeanDetail = memo(function BeanDetail({
             onChange={(e) => setEditStatus(e.target.value)}
             className="text-sm px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {availableStatuses.map((s) => (
+            {BEAN_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
-            {!availableStatuses.includes(editStatus) && editStatus && (
+            {!BEAN_STATUSES.includes(editStatus) && editStatus && (
               <option value={editStatus}>{editStatus}</option>
             )}
           </select>
@@ -341,7 +357,7 @@ export const BeanDetail = memo(function BeanDetail({
           <button
             onClick={handleOpenInEditor}
             disabled={isOpeningEditor}
-            className="text-xs px-2.5 py-1.5 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+            className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
             {isOpeningEditor ? 'Opening…' : 'Open in Editor'}
           </button>
@@ -362,27 +378,27 @@ export const BeanDetail = memo(function BeanDetail({
 
   return (
     <div className="flex flex-col h-full p-6 gap-4 overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-snug flex-1">
-          {bean.title || '(untitled)'}
-        </h1>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleEditStart}
-            className="text-xs px-2.5 py-1.5 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
-            Edit
-          </button>
-          <button
-            onClick={handleOpenInEditor}
-            disabled={isOpeningEditor}
-            className="text-xs px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors disabled:opacity-50"
-          >
-            {isOpeningEditor ? 'Opening…' : 'Open in Editor'}
-          </button>
-        </div>
+      {/* Toolbar — above title */}
+      <div className="flex items-center gap-2 justify-end">
+        <button
+          onClick={handleEditStart}
+          className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        >
+          Edit
+        </button>
+        <button
+          onClick={handleOpenInEditor}
+          disabled={isOpeningEditor}
+          className="text-xs px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors disabled:opacity-50"
+        >
+          {isOpeningEditor ? 'Opening…' : <>Edit <span className="text-[10px]">↗</span></>}
+        </button>
       </div>
+
+      {/* Title */}
+      <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-snug">
+        {bean.title || '(untitled)'}
+      </h1>
 
       {/* Metadata row: ID + type badge + created date */}
       <div className="flex items-center gap-3 flex-wrap">

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { BeanDetail } from '../../components/BeanDetail'
 import type { Bean } from '../../types/beans'
 import { openUrl as mockOpenUrl } from '@tauri-apps/plugin-opener'
@@ -78,8 +78,8 @@ describe('BeanDetail', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
-  it('save button calls onSave with updated fields', () => {
-    const onSave = vi.fn()
+  it('save button calls onSave with updated fields', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
     render(<BeanDetail {...defaultProps} onSave={onSave} />)
     fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
 
@@ -87,7 +87,9 @@ describe('BeanDetail', () => {
     const titleInput = screen.getByPlaceholderText('Bean title')
     fireEvent.change(titleInput, { target: { value: 'Updated Title' } })
 
-    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Save$/i }))
+    })
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Updated Title' })
     )
@@ -97,7 +99,7 @@ describe('BeanDetail', () => {
 
   it('open in editor button is present', () => {
     render(<BeanDetail {...defaultProps} />)
-    const openButtons = screen.getAllByRole('button', { name: /Open in Editor/i })
+    const openButtons = screen.getAllByRole('button', { name: /Edit ↗/i })
     expect(openButtons.length).toBeGreaterThan(0)
   })
 

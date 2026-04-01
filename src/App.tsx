@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import type { Bean } from './types/beans';
 import { updateBean, updateBeanStatus, openBeanInEditor, startWatching, stopWatching } from './lib/tauri';
 import { CreateBeanForm } from './components/CreateBeanForm';
@@ -8,7 +8,7 @@ import { useToast } from './hooks/useToast';
 import { useKeyboardNav } from './hooks/useKeyboardNav';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
-import { BeanList } from './components/BeanList';
+import { BeanList, collectTags } from './components/BeanList';
 import { BeanDetail } from './components/BeanDetail';
 import { Toast } from './components/Toast';
 import { KeyboardHelp } from './components/KeyboardHelp';
@@ -43,7 +43,10 @@ function App() {
 
   const [selectedBeanId, setSelectedBeanId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
+
+  const availableTags = useMemo(() => collectTags(beans), [beans]);
   const { toasts, showToast, dismissToast } = useToast();
 
   // Flat visible bean id list, kept in sync by BeanList via onFlatListChange
@@ -166,6 +169,8 @@ function App() {
   const handleSelectProject = useCallback(
     async (path: string) => {
       setSelectedBeanId(null);
+      setStatusFilter([]);
+      setTagFilter([]);
       try {
         await setActiveProject(path);
       } catch (err) {
@@ -302,6 +307,9 @@ function App() {
             statusFilter={statusFilter}
             onStatusFilter={setStatusFilter}
             statuses={availableStatuses}
+            tagFilter={tagFilter}
+            onTagFilter={setTagFilter}
+            tags={availableTags}
           />
         }
         list={
@@ -314,6 +322,7 @@ function App() {
             }}
             loading={beansLoading}
             statusFilter={statusFilter}
+            tagFilter={tagFilter}
             lastRefreshed={lastRefreshed}
             onNewBean={() => {
               setIsCreating(true);
@@ -328,7 +337,6 @@ function App() {
           isCreating ? (
             <CreateBeanForm
               projectPath={activeProject ?? ''}
-              availableStatuses={availableStatuses}
               allBeans={beans}
               onCreated={(bean) => {
                 refresh();

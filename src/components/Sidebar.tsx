@@ -2,6 +2,8 @@ import { useState, memo } from 'react';
 import type { Project } from '../types/beans';
 import { AddProjectDialog } from './AddProjectDialog';
 
+const BEAN_STATUSES = ['todo', 'in-progress', 'completed', 'scrapped', 'draft'];
+
 interface SidebarProps {
   projects: Project[];
   activeProject: string | null;
@@ -13,6 +15,9 @@ interface SidebarProps {
   statusFilter: string[];
   onStatusFilter: (s: string[]) => void;
   statuses: string[];
+  tagFilter: string[];
+  onTagFilter: (tags: string[]) => void;
+  tags: string[];
 }
 
 export const Sidebar = memo(function Sidebar({
@@ -24,6 +29,9 @@ export const Sidebar = memo(function Sidebar({
   statusFilter,
   onStatusFilter,
   statuses,
+  tagFilter,
+  onTagFilter,
+  tags,
 }: SidebarProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   // path currently pending inline remove confirmation
@@ -38,6 +46,8 @@ export const Sidebar = memo(function Sidebar({
     <div className="flex flex-col h-full text-sm select-none">
       {/* Traffic light spacer for macOS overlay titlebar */}
       <div style={{ height: 'env(titlebar-area-height, 28px)' }} className="flex-shrink-0" aria-hidden="true" />
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto">
       {/* Projects section */}
       <div className="px-3 pt-4 pb-2">
         <div className="flex items-center justify-between mb-1">
@@ -178,6 +188,70 @@ export const Sidebar = memo(function Sidebar({
           })}
         </ul>
       </div>
+
+      {/* Divider */}
+      {tags.length > 0 && (
+        <div className="mx-3 my-2 border-t border-gray-200 dark:border-gray-800" />
+      )}
+
+      {/* Tag filter section */}
+      {tags.length > 0 && (
+        <div className="px-3 pb-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Tags
+            </span>
+            {tagFilter.length > 0 && (
+              <button
+                onClick={() => onTagFilter([])}
+                className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
+              >
+                All
+              </button>
+            )}
+          </div>
+
+          <ul className="space-y-0.5">
+            {tags.map((tag) => {
+              const isActive = tagFilter.includes(tag);
+              return (
+                <li key={tag}>
+                  <button
+                    onClick={() => {
+                      if (isActive) {
+                        onTagFilter(tagFilter.filter((t) => t !== tag));
+                      } else {
+                        onTagFilter([...tagFilter, tag]);
+                      }
+                    }}
+                    className={[
+                      'w-full text-left flex items-center gap-2 px-2 py-1.5 rounded transition-colors',
+                      isActive
+                        ? 'bg-blue-500 text-white'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700',
+                    ].join(' ')}
+                  >
+                    <span
+                      className={[
+                        'w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center text-xs',
+                        isActive
+                          ? 'border-white bg-white/20'
+                          : 'border-gray-400 dark:border-gray-500',
+                      ].join(' ')}
+                      aria-hidden="true"
+                    >
+                      {isActive && '✓'}
+                    </span>
+                    #{tag}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      </div>{/* end scrollable content */}
 
       {/* Add Project Dialog */}
       {showAddDialog && (
