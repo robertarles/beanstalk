@@ -14,7 +14,6 @@ interface SidebarProps {
   onRemoveProject?: (path: string) => void;
   statusFilter: string[];
   onStatusFilter: (s: string[]) => void;
-  statuses: string[];
   tagFilter: string[];
   onTagFilter: (tags: string[]) => void;
   tags: string[];
@@ -28,7 +27,6 @@ export const Sidebar = memo(function Sidebar({
   onRemoveProject,
   statusFilter,
   onStatusFilter,
-  statuses,
   tagFilter,
   onTagFilter,
   tags,
@@ -151,7 +149,7 @@ export const Sidebar = memo(function Sidebar({
         </div>
 
         <ul className="space-y-0.5">
-          {statuses.map((status) => {
+          {BEAN_STATUSES.map((status) => {
             const isActive = statusFilter.includes(status);
             return (
               <li key={status}>

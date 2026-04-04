@@ -17,7 +17,6 @@ const defaultProps = {
   onRemoveProject: vi.fn(),
   statusFilter: [] as string[],
   onStatusFilter: vi.fn(),
-  statuses: ['todo', 'in-progress', 'completed'],
   tagFilter: [] as string[],
   onTagFilter: vi.fn(),
   tags: [] as string[],

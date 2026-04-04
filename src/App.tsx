@@ -306,7 +306,6 @@ function App() {
             onRemoveProject={handleRemoveProject}
             statusFilter={statusFilter}
             onStatusFilter={setStatusFilter}
-            statuses={availableStatuses}
             tagFilter={tagFilter}
             onTagFilter={setTagFilter}
             tags={availableTags}
