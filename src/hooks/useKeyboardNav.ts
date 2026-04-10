@@ -29,8 +29,10 @@ export interface UseKeyboardNavOptions {
   onOpenInEditor?: () => void;
   /** Called when `e` is pressed — enter edit mode for selected bean. */
   onEnterEditMode?: () => void;
-  /** Called when `n` is pressed — open the new-bean form. */
+  /** Called when `n` or `c` is pressed — open the new-bean form. */
   onNewBean?: () => void;
+  /** Called when `l` is pressed — toggle expand/collapse of selected bean. */
+  onToggleExpand?: () => void;
   /** Called when `s` is pressed — cycle the selected bean's status. */
   onCycleStatus?: () => void;
   /** Called when `y` is pressed — copy selected bean ID to clipboard. */
@@ -64,6 +66,7 @@ export function useKeyboardNav({
   onNewBean,
   onCycleStatus,
   onCopyId,
+  onToggleExpand,
 }: UseKeyboardNavOptions): UseKeyboardNavResult {
   const [state, setState] = useState<KeyboardNavState>({
     focusedPanel: 'list',
@@ -97,6 +100,9 @@ export function useKeyboardNav({
 
   const onCopyIdRef = useRef(onCopyId);
   onCopyIdRef.current = onCopyId;
+
+  const onToggleExpandRef = useRef(onToggleExpand);
+  onToggleExpandRef.current = onToggleExpand;
 
   // Escape handler registry
   const escapeHandlersRef = useRef<EscapeHandler[]>([]);
@@ -172,6 +178,10 @@ export function useKeyboardNav({
     onCopyIdRef.current?.();
   }, []);
 
+  const toggleExpand = useCallback(() => {
+    onToggleExpandRef.current?.();
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Escape handler management
   // ---------------------------------------------------------------------------
@@ -235,17 +245,23 @@ export function useKeyboardNav({
         event.preventDefault();
         selectPrevious();
       },
-      h: (event: KeyboardEvent) => {
+      'Control+h': (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
         if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         focusLeft();
       },
-      l: (event: KeyboardEvent) => {
+      'Control+l': (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
         if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         focusRight();
+      },
+      l: (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
+        event.preventDefault();
+        toggleExpand();
       },
       g: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
@@ -302,6 +318,12 @@ export function useKeyboardNav({
         event.preventDefault();
         newBean();
       },
+      c: (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
+        event.preventDefault();
+        newBean();
+      },
       s: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
         if (stateRef.current.isModalOpen) return;
@@ -344,7 +366,7 @@ export function useKeyboardNav({
         clearTimeout(pendingKeyTimerRef.current);
       }
     };
-  }, [selectNext, selectPrevious, focusLeft, focusRight, jumpToFirst, jumpToLast, handleEscape, focusSearch, openInEditor, enterEditMode, newBean, cycleStatus, copyId]);
+  }, [selectNext, selectPrevious, focusLeft, focusRight, jumpToFirst, jumpToLast, handleEscape, focusSearch, openInEditor, enterEditMode, newBean, cycleStatus, copyId, toggleExpand]);
 
   // ---------------------------------------------------------------------------
   // Stable setters

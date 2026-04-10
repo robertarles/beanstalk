@@ -10,6 +10,7 @@ interface BeanDetailProps {
   bean: Bean | null;
   onOpenInEditor: () => void;
   onStatusChange: (status: string) => void;
+  onPriorityChange?: (priority: string | null) => void | Promise<void>;
   availableStatuses: string[];
   allBeans?: Bean[];
   onSave?: (fields: Partial<Bean>) => void | Promise<void>;
@@ -57,10 +58,13 @@ function formattedDate(iso: string | null): string {
   }
 }
 
+const BEAN_PRIORITIES = ['critical', 'high', 'normal', 'low', 'deferred'] as const;
+
 export const BeanDetail = memo(function BeanDetail({
   bean,
   onOpenInEditor,
   onStatusChange,
+  onPriorityChange,
   availableStatuses,
   allBeans = [],
   onSave = () => {},
@@ -145,7 +149,7 @@ export const BeanDetail = memo(function BeanDetail({
     } finally {
       setIsSaving(false);
     }
-  }, [bean, editTitle, editStatus, editTags, editAssignee, editParentId, onSave]);
+  }, [bean, editTitle, editStatus, editTags, editAssignee, editPriority, editParentId, onSave]);
 
   const handleOpenInEditor = useCallback(async () => {
     if (!bean) return;
@@ -451,14 +455,21 @@ export const BeanDetail = memo(function BeanDetail({
       </div>
 
       {/* Priority */}
-      {bean.priority && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20 shrink-0">
-            Priority
-          </span>
-          <span className="text-sm text-gray-700 dark:text-gray-300 capitalize">{bean.priority}</span>
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20 shrink-0">
+          Priority
+        </span>
+        <select
+          value={bean.priority ?? ''}
+          onChange={(e) => onPriorityChange?.(e.target.value || null)}
+          className="text-xs px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        >
+          <option value="">— none —</option>
+          {BEAN_PRIORITIES.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+      </div>
 
       {/* Assignee */}
       {bean.assignee && (

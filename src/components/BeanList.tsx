@@ -26,6 +26,11 @@ interface BeanListProps {
    * Priority 10 — clears search and blurs the search input.
    */
   registerEscapeHandler?: (priority: number, handler: () => boolean) => () => void;
+  /**
+   * Ref that BeanList populates with its toggleExpand function so the parent
+   * can trigger expand/collapse via keyboard without prop-drilling state.
+   */
+  toggleExpandRef?: { current: ((id: string) => void) | undefined };
 }
 
 type SortColumn = 'title' | 'status' | 'date';
@@ -165,7 +170,7 @@ function SortArrow({ column, sort }: { column: SortColumn; sort: SortState }) {
 }
 
 // --- Main component ---
-export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], tagFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler }: BeanListProps) {
+export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], tagFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler, toggleExpandRef }: BeanListProps) {
   const [sort, setSort] = useState<SortState>({ column: 'date', direction: 'desc' });
   const [expanded, setExpanded] = useState<Map<string, boolean>>(new Map());
   const [search, setSearch] = useState('');
@@ -174,6 +179,7 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
   const [showUpdated, setShowUpdated] = useState(false);
   const updatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   // Register escape handler: when search is focused & non-empty, Escape clears and blurs it.
   const handleSearchEscape = useCallback((): boolean => {
@@ -190,6 +196,16 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
     if (!registerEscapeHandler) return;
     return registerEscapeHandler(10, handleSearchEscape);
   }, [registerEscapeHandler, handleSearchEscape]);
+
+  // Scroll the list so the keyboard-focused row stays visible
+  useEffect(() => {
+    if (keyboardSelectedIndex === undefined || keyboardSelectedIndex < 0) return;
+    const ul = listRef.current;
+    if (!ul) return;
+    const items = ul.querySelectorAll<HTMLLIElement>(':scope > li');
+    const target = items[keyboardSelectedIndex];
+    if (target) target.scrollIntoView({ block: 'nearest' });
+  }, [keyboardSelectedIndex]);
 
   // Show the "Updated" indicator whenever lastRefreshed changes (but not on initial mount)
   const prevLastRefreshed = useRef<number | undefined>(undefined);
@@ -218,14 +234,18 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
     };
   }, [search]);
 
-  // Toggle expand/collapse
-  function toggleExpand(id: string) {
+  // Toggle expand/collapse — stable ref, exposed to parent via toggleExpandRef
+  const toggleExpand = useCallback((id: string) => {
     setExpanded((prev) => {
       const next = new Map(prev);
       next.set(id, !prev.get(id));
       return next;
     });
-  }
+  }, []);
+
+  useEffect(() => {
+    if (toggleExpandRef) toggleExpandRef.current = toggleExpand;
+  }, [toggleExpandRef, toggleExpand]);
 
   // Toggle sort column
   function handleSort(col: SortColumn) {
@@ -376,6 +396,7 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
         >
           Title <SortArrow column="title" sort={sort} />
         </button>
+        <span className="w-20 shrink-0 text-left">Priority</span>
         <button
           onClick={() => handleSort('status')}
           className="w-20 text-left hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
@@ -396,15 +417,13 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
           <span className="text-sm">{hasSearch ? 'No matching beans' : 'No beans found'}</span>
         </div>
       ) : (
-        <ul className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+        <ul ref={listRef} className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
           {flatRows.map(({ bean, depth }, rowIndex) => {
             const isSelected = !!bean.id && bean.id === selectedId;
             const isKeyboardFocused =
               keyboardSelectedIndex !== undefined && keyboardSelectedIndex === rowIndex;
             const hasChildren = bean.children && bean.children.length > 0;
             const isExpanded = !!expanded.get(bean.id);
-
-            const showPriorityBadge = bean.priority && bean.priority.toLowerCase() !== 'normal';
 
             return (
               <li key={bean.file_path || `${bean.id}-${depth}`}>
@@ -458,6 +477,17 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
                       {bean.title || '(untitled)'}
                     </span>
 
+                    {/* Priority (fixed width, 3rd column) */}
+                    <span className="w-20 shrink-0">
+                      {bean.priority ? (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${priorityBadgeClass(bean.priority)}`}>
+                          {bean.priority}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-300 dark:text-gray-600">—</span>
+                      )}
+                    </span>
+
                     {/* Status label (muted, fixed width) */}
                     <span className="w-20 text-xs text-gray-400 dark:text-gray-500 truncate capitalize shrink-0">
                       {bean.status}
@@ -469,14 +499,9 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
                     </span>
                   </div>
 
-                  {/* Sub-row: priority badge + tags (only when non-normal priority or tags exist) */}
-                  {(showPriorityBadge || bean.tags.length > 0) && (
+                  {/* Sub-row: tags (only when tags exist) */}
+                  {bean.tags.length > 0 && (
                     <div className="flex items-center gap-1 flex-wrap pl-7 mt-0.5">
-                      {showPriorityBadge && (
-                        <span className={`text-[10px] px-1 rounded font-medium leading-4 shrink-0 capitalize ${priorityBadgeClass(bean.priority)}`}>
-                          {bean.priority}
-                        </span>
-                      )}
                       {bean.tags.slice(0, 3).map((tag) => (
                         <span
                           key={tag}

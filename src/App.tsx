@@ -52,6 +52,12 @@ function App() {
   // Flat visible bean id list, kept in sync by BeanList via onFlatListChange
   const flatBeanIdsRef = useRef<string[]>([]);
 
+  // Ref to BeanList's toggleExpand function for keyboard-driven expand/collapse
+  const beanListToggleExpandRef = useRef<((id: string) => void) | undefined>(undefined);
+
+  // Tracks current keyboard selectedBeanIndex so handleKbToggleExpand is stale-free
+  const selectedBeanIndexRef = useRef(-1);
+
   const handleFlatListChange = useCallback((ids: string[]) => {
     flatBeanIdsRef.current = ids;
   }, []);
@@ -107,6 +113,11 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh, showToast]);
 
+  const handleKbToggleExpand = useCallback(() => {
+    const id = flatBeanIdsRef.current[selectedBeanIndexRef.current];
+    if (id) beanListToggleExpandRef.current?.(id);
+  }, []);
+
   const handleKbCopyId = useCallback(() => {
     const beanId = selectedBeanIdRef.current;
     if (!beanId) return;
@@ -142,7 +153,11 @@ function App() {
     onNewBean: handleKbNewBean,
     onCycleStatus: handleKbCycleStatus,
     onCopyId: handleKbCopyId,
+    onToggleExpand: handleKbToggleExpand,
   });
+
+  // Keep selectedBeanIndexRef current so handleKbToggleExpand is never stale
+  selectedBeanIndexRef.current = selectedBeanIndex;
 
 
   // Start/stop watching when activeProject changes
@@ -217,6 +232,20 @@ function App() {
       } catch (err) {
         console.error('Failed to update status:', err);
         showToast(err instanceof Error ? err.message : 'Failed to update status', 'error');
+      }
+    },
+    [activeProject, selectedBeanId, refresh, showToast]
+  );
+
+  const handlePriorityChange = useCallback(
+    async (priority: string | null) => {
+      if (!activeProject || !selectedBeanId) return;
+      try {
+        await updateBean({ projectPath: activeProject, beanId: selectedBeanId, priority });
+        refresh();
+      } catch (err) {
+        console.error('Failed to update priority:', err);
+        showToast(err instanceof Error ? err.message : 'Failed to update priority', 'error');
       }
     },
     [activeProject, selectedBeanId, refresh, showToast]
@@ -330,6 +359,7 @@ function App() {
             keyboardSelectedIndex={selectedBeanIndex >= 0 ? selectedBeanIndex : undefined}
             onFlatListChange={handleFlatListChange}
             registerEscapeHandler={registerEscapeHandler}
+            toggleExpandRef={beanListToggleExpandRef}
           />
         }
         detail={
@@ -350,6 +380,7 @@ function App() {
               bean={selectedBean}
               onOpenInEditor={handleOpenInEditor}
               onStatusChange={handleStatusChange}
+              onPriorityChange={handlePriorityChange}
               onSave={handleSave}
               availableStatuses={availableStatuses}
               allBeans={beans}
