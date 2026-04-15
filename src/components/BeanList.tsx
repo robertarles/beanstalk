@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+import Fuse from 'fuse.js';
 import type { Bean } from '../types/beans';
 
 interface BeanListProps {
@@ -7,6 +8,7 @@ interface BeanListProps {
   onSelect: (id: string) => void;
   loading: boolean;
   statusFilter?: string[];
+  priorityFilter?: string[];
   tagFilter?: string[];
   onNewBean?: () => void;
   lastRefreshed?: number;
@@ -51,6 +53,18 @@ function statusDotClass(status: string): string {
   return 'bg-gray-400';
 }
 
+// --- Staleness check ---
+// Critical: not updated within 12h; High: not updated within 48h
+function isStale(bean: Bean): boolean {
+  const p = bean.priority?.toLowerCase();
+  if (p !== 'critical' && p !== 'high') return false;
+  const dateStr = bean.updated_at ?? bean.created_at;
+  if (!dateStr) return false;
+  const ageMs = Date.now() - new Date(dateStr).getTime();
+  const thresholdMs = p === 'critical' ? 12 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
+  return ageMs > thresholdMs;
+}
+
 // --- Priority badge color helper ---
 function priorityBadgeClass(priority: string | null): string {
   switch (priority?.toLowerCase()) {
@@ -77,6 +91,20 @@ function flattenVisible(beans: Bean[], expanded: Map<string, boolean>, depth = 0
     }
   }
   return result;
+}
+
+// --- Filter beans to those matching priority (OR logic, recursive) ---
+function filterByPriority(beans: Bean[], priorities: string[]): Bean[] {
+  if (priorities.length === 0) return beans;
+  const lower = priorities.map((p) => p.toLowerCase());
+  return beans.reduce<Bean[]>((acc, bean) => {
+    const filteredChildren = filterByPriority(bean.children ?? [], priorities);
+    const beanPriority = (bean.priority ?? 'normal').toLowerCase();
+    if (lower.includes(beanPriority) || filteredChildren.length > 0) {
+      acc.push({ ...bean, children: filteredChildren });
+    }
+    return acc;
+  }, []);
 }
 
 // --- Collect all beans with matching status (including children) ---
@@ -170,7 +198,7 @@ function SortArrow({ column, sort }: { column: SortColumn; sort: SortState }) {
 }
 
 // --- Main component ---
-export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], tagFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler, toggleExpandRef }: BeanListProps) {
+export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], priorityFilter = [], tagFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler, toggleExpandRef }: BeanListProps) {
   const [sort, setSort] = useState<SortState>({ column: 'date', direction: 'desc' });
   const [expanded, setExpanded] = useState<Map<string, boolean>>(new Map());
   const [search, setSearch] = useState('');
@@ -260,32 +288,58 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
   // Apply status filter
   const statusFiltered = useMemo(() => filterByStatus(beans, statusFilter), [beans, statusFilter]);
 
-  // Apply tag filter
-  const tagFiltered = useMemo(() => filterByTags(statusFiltered, tagFilter), [statusFiltered, tagFilter]);
+  // Apply priority filter
+  const priorityFiltered = useMemo(() => filterByPriority(statusFiltered, priorityFilter), [statusFiltered, priorityFilter]);
 
-  // Apply search filter (client-side, title + id match)
+  // Apply tag filter
+  const tagFiltered = useMemo(() => filterByTags(priorityFiltered, tagFilter), [priorityFiltered, tagFilter]);
+
+  // Flatten tree for Fuse indexing (includes children at all depths)
+  const flatForSearch = useMemo(() => {
+    const out: Bean[] = [];
+    function collect(list: Bean[]) {
+      for (const b of list) {
+        out.push(b);
+        if (b.children?.length) collect(b.children);
+      }
+    }
+    collect(tagFiltered);
+    return out;
+  }, [tagFiltered]);
+
+  // Build Fuse index whenever the flat list changes
+  const fuseIndex = useMemo(() => new Fuse(flatForSearch, {
+    threshold: 0.35,
+    ignoreLocation: true,
+    keys: [
+      { name: 'title', weight: 3 },
+      { name: 'id',    weight: 2 },
+      { name: 'body',  weight: 1 },
+    ],
+  }), [flatForSearch]);
+
+  // Apply fuzzy search — keep a bean if it or any descendant matches
   const searchFiltered = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
+    const q = debouncedSearch.trim();
     if (!q) return tagFiltered;
-    function matchBean(bean: Bean): Bean | null {
-      const titleMatch = (bean.title || '').toLowerCase().includes(q);
-      const idMatch = bean.id.toLowerCase().includes(q);
+    const matchedIds = new Set(fuseIndex.search(q).map((r) => r.item.id));
+    function keepBean(bean: Bean): Bean | null {
       const filteredChildren = (bean.children ?? []).reduce<Bean[]>((acc, child) => {
-        const m = matchBean(child);
+        const m = keepBean(child);
         if (m) acc.push(m);
         return acc;
       }, []);
-      if (titleMatch || idMatch || filteredChildren.length > 0) {
+      if (matchedIds.has(bean.id) || filteredChildren.length > 0) {
         return { ...bean, children: filteredChildren };
       }
       return null;
     }
     return tagFiltered.reduce<Bean[]>((acc, bean) => {
-      const m = matchBean(bean);
+      const m = keepBean(bean);
       if (m) acc.push(m);
       return acc;
     }, []);
-  }, [tagFiltered, debouncedSearch]);
+  }, [tagFiltered, debouncedSearch, fuseIndex]);
 
   // Sort top-level beans
   const sorted = useMemo(() => sortBeans(searchFiltered, sort), [searchFiltered, sort]);
@@ -480,7 +534,7 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
                     {/* Priority (fixed width, 3rd column) */}
                     <span className="w-20 shrink-0">
                       {bean.priority ? (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${priorityBadgeClass(bean.priority)}`}>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${priorityBadgeClass(bean.priority)}${isStale(bean) ? ' stale-pulse' : ''}`}>
                           {bean.priority}
                         </span>
                       ) : (

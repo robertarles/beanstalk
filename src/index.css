@@ -29,3 +29,12 @@ input, textarea, [contenteditable] {
   from { opacity: 1; }
   to { opacity: 0; }
 }
+
+@keyframes stalePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.stale-pulse {
+  animation: stalePulse 1.2s ease-in-out infinite;
+}
