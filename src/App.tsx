@@ -60,13 +60,14 @@ function App() {
 
   const activeProject = config?.last_active_project ?? null;
 
-  const { beans, loading: beansLoading, refresh, lastRefreshed } = useBeans(activeProject);
+  const { beans, loading: beansLoading, refresh, lastRefreshed, applyBeanUpdate } = useBeans(activeProject);
 
   const [selectedBeanId, setSelectedBeanId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string[]>(['todo', 'in-progress', 'draft']);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
+  const [staleFilter, setStaleFilter] = useState(false);
 
   const availableTags = useMemo(() => collectTags(beans), [beans]);
   const staleCounts = useMemo<Record<string, number>>(() => {
@@ -214,6 +215,7 @@ function App() {
       setStatusFilter(['todo', 'in-progress', 'draft']);
       setPriorityFilter([]);
       setTagFilter([]);
+      setStaleFilter(false);
       try {
         await setActiveProject(path);
       } catch (err) {
@@ -255,7 +257,8 @@ function App() {
     async (status: string) => {
       if (!activeProject || !selectedBeanId) return;
       try {
-        await updateBeanStatus(activeProject, selectedBeanId, status);
+        const updated = await updateBeanStatus(activeProject, selectedBeanId, status);
+        applyBeanUpdate(updated);
         refresh();
       } catch (err) {
         console.error('Failed to update status:', err);
@@ -269,7 +272,8 @@ function App() {
     async (priority: string | null) => {
       if (!activeProject || !selectedBeanId) return;
       try {
-        await updateBean({ projectPath: activeProject, beanId: selectedBeanId, priority });
+        const updated = await updateBean({ projectPath: activeProject, beanId: selectedBeanId, priority });
+        applyBeanUpdate(updated);
         refresh();
       } catch (err) {
         console.error('Failed to update priority:', err);
@@ -283,7 +287,7 @@ function App() {
     async (fields: Partial<Bean>) => {
       if (!activeProject || !selectedBeanId) return;
       try {
-        await updateBean({
+        const updated = await updateBean({
           projectPath: activeProject,
           beanId: selectedBeanId,
           title: fields.title,
@@ -294,6 +298,7 @@ function App() {
           parent: fields.parent,
           priority: fields.priority,
         });
+        applyBeanUpdate(updated);
         refresh();
         showToast('Bean saved', 'success');
       } catch (err) {
@@ -369,6 +374,8 @@ function App() {
             onTagFilter={setTagFilter}
             tags={availableTags}
             staleCounts={staleCounts}
+            staleFilter={staleFilter}
+            onStaleFilter={setStaleFilter}
           />
         }
         list={
@@ -383,6 +390,7 @@ function App() {
             statusFilter={statusFilter}
             priorityFilter={priorityFilter}
             tagFilter={tagFilter}
+            staleFilter={staleFilter}
             lastRefreshed={lastRefreshed}
             onNewBean={() => {
               setIsCreating(true);

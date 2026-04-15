@@ -22,6 +22,9 @@ interface SidebarProps {
   tags: string[];
   /** Stale bean counts keyed by project path. */
   staleCounts?: Record<string, number>;
+  /** When true, the bean list is filtered to stale items only. */
+  staleFilter?: boolean;
+  onStaleFilter?: (active: boolean) => void;
 }
 
 export const Sidebar = memo(function Sidebar({
@@ -38,6 +41,8 @@ export const Sidebar = memo(function Sidebar({
   onTagFilter,
   tags,
   staleCounts = {},
+  staleFilter = false,
+  onStaleFilter,
 }: SidebarProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   // path currently pending inline remove confirmation
@@ -120,9 +125,19 @@ export const Sidebar = memo(function Sidebar({
                       <div className="flex items-center gap-1.5">
                         <span className="font-medium truncate">{displayName}</span>
                         {staleCounts[project.path] > 0 && (
-                          <span className="stale-pulse shrink-0 min-w-[1.1rem] h-[1.1rem] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none px-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onStaleFilter?.(!staleFilter);
+                            }}
+                            title={staleFilter ? 'Show all beans' : 'Show only stale beans'}
+                            className={[
+                              'stale-pulse shrink-0 min-w-[1.1rem] h-[1.1rem] flex items-center justify-center rounded-full text-white text-[10px] font-bold leading-none px-1 transition-colors',
+                              staleFilter ? 'bg-red-700' : 'bg-red-500 hover:bg-red-600',
+                            ].join(' ')}
+                          >
                             {staleCounts[project.path]}
-                          </span>
+                          </button>
                         )}
                       </div>
                       <div className="text-xs text-gray-400 dark:text-gray-500 truncate">

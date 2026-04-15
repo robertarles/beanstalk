@@ -33,6 +33,8 @@ interface BeanListProps {
    * can trigger expand/collapse via keyboard without prop-drilling state.
    */
   toggleExpandRef?: { current: ((id: string) => void) | undefined };
+  /** When true, only stale beans (and their parents) are shown. */
+  staleFilter?: boolean;
 }
 
 type SortColumn = 'title' | 'status' | 'date';
@@ -63,6 +65,36 @@ function isStale(bean: Bean): boolean {
   const ageMs = Date.now() - new Date(dateStr).getTime();
   const thresholdMs = p === 'critical' ? 12 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
   return ageMs > thresholdMs;
+}
+
+// --- Filter tree to stale beans (and their ancestors) ---
+function filterToStale(beans: Bean[]): Bean[] {
+  return beans.reduce<Bean[]>((acc, bean) => {
+    const filteredChildren = filterToStale(bean.children ?? []);
+    if (isStale(bean) || filteredChildren.length > 0) {
+      acc.push({ ...bean, children: filteredChildren });
+    }
+    return acc;
+  }, []);
+}
+
+// --- Collect all IDs that have stale descendants (for auto-expand) ---
+function collectAncestorIds(beans: Bean[]): Set<string> {
+  const ids = new Set<string>();
+  function visit(list: Bean[]): boolean {
+    let hasStaleDescendant = false;
+    for (const bean of list) {
+      const childHasStale = visit(bean.children ?? []);
+      if (childHasStale) {
+        ids.add(bean.id);
+        hasStaleDescendant = true;
+      }
+      if (isStale(bean)) hasStaleDescendant = true;
+    }
+    return hasStaleDescendant;
+  }
+  visit(beans);
+  return ids;
 }
 
 // --- Priority badge color helper ---
@@ -198,7 +230,7 @@ function SortArrow({ column, sort }: { column: SortColumn; sort: SortState }) {
 }
 
 // --- Main component ---
-export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], priorityFilter = [], tagFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler, toggleExpandRef }: BeanListProps) {
+export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], priorityFilter = [], tagFilter = [], staleFilter = false, onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler, toggleExpandRef }: BeanListProps) {
   const [sort, setSort] = useState<SortState>({ column: 'date', direction: 'desc' });
   const [expanded, setExpanded] = useState<Map<string, boolean>>(new Map());
   const [search, setSearch] = useState('');
@@ -294,6 +326,23 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
   // Apply tag filter
   const tagFiltered = useMemo(() => filterByTags(priorityFiltered, tagFilter), [priorityFiltered, tagFilter]);
 
+  // Apply stale filter
+  const staleFiltered = useMemo(
+    () => staleFilter ? filterToStale(tagFiltered) : tagFiltered,
+    [tagFiltered, staleFilter]
+  );
+
+  // When stale filter is active, auto-expand all ancestor nodes that contain stale beans
+  useEffect(() => {
+    if (!staleFilter) return;
+    const ancestorIds = collectAncestorIds(tagFiltered);
+    setExpanded((prev) => {
+      const next = new Map(prev);
+      for (const id of ancestorIds) next.set(id, true);
+      return next;
+    });
+  }, [staleFilter, tagFiltered]);
+
   // Flatten tree for Fuse indexing (includes children at all depths)
   const flatForSearch = useMemo(() => {
     const out: Bean[] = [];
@@ -303,9 +352,9 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
         if (b.children?.length) collect(b.children);
       }
     }
-    collect(tagFiltered);
+    collect(staleFiltered);
     return out;
-  }, [tagFiltered]);
+  }, [staleFiltered]);
 
   // Build Fuse index whenever the flat list changes
   const fuseIndex = useMemo(() => new Fuse(flatForSearch, {
@@ -321,7 +370,7 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
   // Apply fuzzy search — keep a bean if it or any descendant matches
   const searchFiltered = useMemo(() => {
     const q = debouncedSearch.trim();
-    if (!q) return tagFiltered;
+    if (!q) return staleFiltered;
     const matchedIds = new Set(fuseIndex.search(q).map((r) => r.item.id));
     function keepBean(bean: Bean): Bean | null {
       const filteredChildren = (bean.children ?? []).reduce<Bean[]>((acc, child) => {
@@ -334,12 +383,12 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
       }
       return null;
     }
-    return tagFiltered.reduce<Bean[]>((acc, bean) => {
+    return staleFiltered.reduce<Bean[]>((acc, bean) => {
       const m = keepBean(bean);
       if (m) acc.push(m);
       return acc;
     }, []);
-  }, [tagFiltered, debouncedSearch, fuseIndex]);
+  }, [staleFiltered, debouncedSearch, fuseIndex]);
 
   // Sort top-level beans
   const sorted = useMemo(() => sortBeans(searchFiltered, sort), [searchFiltered, sort]);

@@ -9,6 +9,16 @@ interface UseBeansResult {
   error: string | null;
   refresh: () => void;
   lastRefreshed: number | undefined;
+  /** Immediately replace one bean in the tree (by id) without a full reload. */
+  applyBeanUpdate: (updated: Bean) => void;
+}
+
+function replaceInTree(beans: Bean[], updated: Bean): Bean[] {
+  return beans.map((b) => {
+    if (b.id === updated.id) return { ...updated, children: b.children };
+    if (b.children?.length) return { ...b, children: replaceInTree(b.children, updated) };
+    return b;
+  });
 }
 
 export function useBeans(projectPath: string | null): UseBeansResult {
@@ -61,5 +71,9 @@ export function useBeans(projectPath: string | null): UseBeansResult {
     loadBeans();
   }, [loadBeans]);
 
-  return { beans, loading, error, refresh, lastRefreshed };
+  const applyBeanUpdate = useCallback((updated: Bean) => {
+    setBeans((prev) => replaceInTree(prev, updated));
+  }, []);
+
+  return { beans, loading, error, refresh, lastRefreshed, applyBeanUpdate };
 }
