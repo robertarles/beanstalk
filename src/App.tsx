@@ -13,6 +13,27 @@ import { BeanDetail } from './components/BeanDetail';
 import { Toast } from './components/Toast';
 import { KeyboardHelp } from './components/KeyboardHelp';
 
+/** Count beans that are stale: critical not updated in 12h, or high not updated in 48h. */
+function countStaleBeans(beans: Bean[]): number {
+  let count = 0;
+  function visit(list: Bean[]) {
+    for (const b of list) {
+      const p = b.priority?.toLowerCase();
+      if (p === 'critical' || p === 'high') {
+        const dateStr = b.updated_at ?? b.created_at;
+        if (dateStr) {
+          const ageMs = Date.now() - new Date(dateStr).getTime();
+          const thresholdMs = p === 'critical' ? 12 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
+          if (ageMs > thresholdMs) count++;
+        }
+      }
+      if (b.children?.length) visit(b.children);
+    }
+  }
+  visit(beans);
+  return count;
+}
+
 /** Collect unique statuses from a bean tree. */
 function collectStatuses(beans: Bean[], out = new Set<string>()): string[] {
   for (const b of beans) {
@@ -42,11 +63,17 @@ function App() {
   const { beans, loading: beansLoading, refresh, lastRefreshed } = useBeans(activeProject);
 
   const [selectedBeanId, setSelectedBeanId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>(['todo', 'in-progress', 'draft']);
+  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
 
   const availableTags = useMemo(() => collectTags(beans), [beans]);
+  const staleCounts = useMemo<Record<string, number>>(() => {
+    if (!activeProject) return {};
+    const count = countStaleBeans(beans);
+    return count > 0 ? { [activeProject]: count } : {};
+  }, [activeProject, beans]);
   const { toasts, showToast, dismissToast } = useToast();
 
   // Flat visible bean id list, kept in sync by BeanList via onFlatListChange
@@ -184,7 +211,8 @@ function App() {
   const handleSelectProject = useCallback(
     async (path: string) => {
       setSelectedBeanId(null);
-      setStatusFilter([]);
+      setStatusFilter(['todo', 'in-progress', 'draft']);
+      setPriorityFilter([]);
       setTagFilter([]);
       try {
         await setActiveProject(path);
@@ -333,11 +361,14 @@ function App() {
             onSelectProject={handleSelectProject}
             onAddProject={handleAddProject}
             onRemoveProject={handleRemoveProject}
+            priorityFilter={priorityFilter}
+            onPriorityFilter={setPriorityFilter}
             statusFilter={statusFilter}
             onStatusFilter={setStatusFilter}
             tagFilter={tagFilter}
             onTagFilter={setTagFilter}
             tags={availableTags}
+            staleCounts={staleCounts}
           />
         }
         list={
@@ -350,6 +381,7 @@ function App() {
             }}
             loading={beansLoading}
             statusFilter={statusFilter}
+            priorityFilter={priorityFilter}
             tagFilter={tagFilter}
             lastRefreshed={lastRefreshed}
             onNewBean={() => {

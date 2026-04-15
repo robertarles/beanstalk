@@ -3,6 +3,7 @@ import type { Project } from '../types/beans';
 import { AddProjectDialog } from './AddProjectDialog';
 
 const BEAN_STATUSES = ['todo', 'in-progress', 'completed', 'scrapped', 'draft'];
+const BEAN_PRIORITIES = ['critical', 'high', 'normal', 'low', 'deferred'];
 
 interface SidebarProps {
   projects: Project[];
@@ -12,11 +13,15 @@ interface SidebarProps {
   onAddProject?: (path: string) => Promise<void>;
   /** Called with the project path to remove after the user confirms inline. */
   onRemoveProject?: (path: string) => void;
+  priorityFilter: string[];
+  onPriorityFilter: (p: string[]) => void;
   statusFilter: string[];
   onStatusFilter: (s: string[]) => void;
   tagFilter: string[];
   onTagFilter: (tags: string[]) => void;
   tags: string[];
+  /** Stale bean counts keyed by project path. */
+  staleCounts?: Record<string, number>;
 }
 
 export const Sidebar = memo(function Sidebar({
@@ -25,15 +30,21 @@ export const Sidebar = memo(function Sidebar({
   onSelectProject,
   onAddProject,
   onRemoveProject,
+  priorityFilter,
+  onPriorityFilter,
   statusFilter,
   onStatusFilter,
   tagFilter,
   onTagFilter,
   tags,
+  staleCounts = {},
 }: SidebarProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   // path currently pending inline remove confirmation
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [priorityOpen, setPriorityOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
 
   const handleRemoveConfirm = (path: string) => {
     setConfirmRemove(null);
@@ -106,7 +117,14 @@ export const Sidebar = memo(function Sidebar({
                       ].join(' ')}
                       title={project.path}
                     >
-                      <div className="font-medium truncate">{displayName}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium truncate">{displayName}</span>
+                        {staleCounts[project.path] > 0 && (
+                          <span className="stale-pulse shrink-0 min-w-[1.1rem] h-[1.1rem] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none px-1">
+                            {staleCounts[project.path]}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-gray-400 dark:text-gray-500 truncate">
                         {project.path}
                       </div>
@@ -132,12 +150,85 @@ export const Sidebar = memo(function Sidebar({
       {/* Divider */}
       <div className="mx-3 my-2 border-t border-gray-200 dark:border-gray-800" />
 
+      {/* Priority filter section */}
+      <div className="px-3 pb-4">
+        <div className="flex items-center justify-between mb-1">
+          <button
+            onClick={() => setPriorityOpen((o) => !o)}
+            className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+          >
+            <span
+              className={['inline-block transition-transform duration-150 text-xs leading-none', priorityOpen ? 'rotate-90' : ''].join(' ')}
+              aria-hidden="true"
+            >▶</span>
+            Priority
+          </button>
+          {priorityFilter.length > 0 && (
+            <button
+              onClick={() => onPriorityFilter([])}
+              className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
+            >
+              All
+            </button>
+          )}
+        </div>
+
+        <ul className="space-y-0.5">
+          {BEAN_PRIORITIES.map((priority) => {
+            const isActive = priorityFilter.includes(priority);
+            if (!priorityOpen && !isActive) return null;
+            return (
+              <li key={priority}>
+                <button
+                  onClick={() => {
+                    if (isActive) {
+                      onPriorityFilter(priorityFilter.filter((p) => p !== priority));
+                    } else {
+                      onPriorityFilter([...priorityFilter, priority]);
+                    }
+                  }}
+                  className={[
+                    'w-full text-left flex items-center gap-2 px-2 py-1.5 rounded transition-colors capitalize',
+                    isActive
+                      ? 'bg-blue-500 text-white'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700',
+                  ].join(' ')}
+                >
+                  <span
+                    className={[
+                      'w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center text-xs',
+                      isActive
+                        ? 'border-white bg-white/20'
+                        : 'border-gray-400 dark:border-gray-500',
+                    ].join(' ')}
+                    aria-hidden="true"
+                  >
+                    {isActive && '✓'}
+                  </span>
+                  {priority}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/* Divider */}
+      <div className="mx-3 my-2 border-t border-gray-200 dark:border-gray-800" />
+
       {/* Status filter section */}
       <div className="px-3 pb-4">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <button
+            onClick={() => setStatusOpen((o) => !o)}
+            className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+          >
+            <span
+              className={['inline-block transition-transform duration-150 text-xs leading-none', statusOpen ? 'rotate-90' : ''].join(' ')}
+              aria-hidden="true"
+            >▶</span>
             Status
-          </span>
+          </button>
           {statusFilter.length > 0 && (
             <button
               onClick={() => onStatusFilter([])}
@@ -151,6 +242,7 @@ export const Sidebar = memo(function Sidebar({
         <ul className="space-y-0.5">
           {BEAN_STATUSES.map((status) => {
             const isActive = statusFilter.includes(status);
+            if (!statusOpen && !isActive) return null;
             return (
               <li key={status}>
                 <button
@@ -196,9 +288,16 @@ export const Sidebar = memo(function Sidebar({
       {tags.length > 0 && (
         <div className="px-3 pb-4">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            <button
+              onClick={() => setTagsOpen((o) => !o)}
+              className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+            >
+              <span
+                className={['inline-block transition-transform duration-150 text-xs leading-none', tagsOpen ? 'rotate-90' : ''].join(' ')}
+                aria-hidden="true"
+              >▶</span>
               Tags
-            </span>
+            </button>
             {tagFilter.length > 0 && (
               <button
                 onClick={() => onTagFilter([])}
@@ -212,6 +311,7 @@ export const Sidebar = memo(function Sidebar({
           <ul className="space-y-0.5">
             {tags.map((tag) => {
               const isActive = tagFilter.includes(tag);
+              if (!tagsOpen && !isActive) return null;
               return (
                 <li key={tag}>
                   <button
