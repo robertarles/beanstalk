@@ -67,7 +67,6 @@ function App() {
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
-  const [staleFilter, setStaleFilter] = useState(false);
 
   const availableTags = useMemo(() => collectTags(beans), [beans]);
   const staleCounts = useMemo<Record<string, number>>(() => {
@@ -215,7 +214,6 @@ function App() {
       setStatusFilter(['todo', 'in-progress', 'draft']);
       setPriorityFilter([]);
       setTagFilter([]);
-      setStaleFilter(false);
       try {
         await setActiveProject(path);
       } catch (err) {
@@ -374,8 +372,6 @@ function App() {
             onTagFilter={setTagFilter}
             tags={availableTags}
             staleCounts={staleCounts}
-            staleFilter={staleFilter}
-            onStaleFilter={setStaleFilter}
           />
         }
         list={
@@ -390,7 +386,6 @@ function App() {
             statusFilter={statusFilter}
             priorityFilter={priorityFilter}
             tagFilter={tagFilter}
-            staleFilter={staleFilter}
             lastRefreshed={lastRefreshed}
             onNewBean={() => {
               setIsCreating(true);

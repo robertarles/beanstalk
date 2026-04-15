@@ -22,9 +22,6 @@ interface SidebarProps {
   tags: string[];
   /** Stale bean counts keyed by project path. */
   staleCounts?: Record<string, number>;
-  /** When true, the bean list is filtered to stale items only. */
-  staleFilter?: boolean;
-  onStaleFilter?: (active: boolean) => void;
 }
 
 export const Sidebar = memo(function Sidebar({
@@ -41,8 +38,6 @@ export const Sidebar = memo(function Sidebar({
   onTagFilter,
   tags,
   staleCounts = {},
-  staleFilter = false,
-  onStaleFilter,
 }: SidebarProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   // path currently pending inline remove confirmation
@@ -128,13 +123,10 @@ export const Sidebar = memo(function Sidebar({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onStaleFilter?.(!staleFilter);
+                              onPriorityFilter(['critical', 'high']);
                             }}
-                            title={staleFilter ? 'Show all beans' : 'Show only stale beans'}
-                            className={[
-                              'stale-pulse shrink-0 min-w-[1.1rem] h-[1.1rem] flex items-center justify-center rounded-full text-white text-[10px] font-bold leading-none px-1 transition-colors',
-                              staleFilter ? 'bg-red-700' : 'bg-red-500 hover:bg-red-600',
-                            ].join(' ')}
+                            title="Filter to stale beans (critical & high priority)"
+                            className="stale-pulse shrink-0 min-w-[1.1rem] h-[1.1rem] flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold leading-none px-1 transition-colors"
                           >
                             {staleCounts[project.path]}
                           </button>
