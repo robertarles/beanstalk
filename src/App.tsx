@@ -18,6 +18,8 @@ function countStaleBeans(beans: Bean[]): number {
   let count = 0;
   function visit(list: Bean[]) {
     for (const b of list) {
+      const s = b.status?.toLowerCase();
+      if (s === 'completed' || s === 'scrapped') { if (b.children?.length) visit(b.children); continue; }
       const p = b.priority?.toLowerCase();
       if (p === 'critical' || p === 'high') {
         const dateStr = b.updated_at ?? b.created_at;

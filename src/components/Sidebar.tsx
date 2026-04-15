@@ -126,7 +126,7 @@ export const Sidebar = memo(function Sidebar({
                               onPriorityFilter(['critical', 'high']);
                             }}
                             title="Filter to stale beans (critical & high priority)"
-                            className="stale-pulse shrink-0 min-w-[1.1rem] h-[1.1rem] flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold leading-none px-1 transition-colors"
+                            className="shrink-0 min-w-[1.1rem] h-[1.1rem] flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold leading-none px-1 transition-colors"
                           >
                             {staleCounts[project.path]}
                           </button>

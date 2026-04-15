@@ -56,6 +56,8 @@ function statusDotClass(status: string): string {
 // --- Staleness check ---
 // Critical: not updated within 12h; High: not updated within 48h
 function isStale(bean: Bean): boolean {
+  const s = bean.status?.toLowerCase();
+  if (s === 'completed' || s === 'scrapped') return false;
   const p = bean.priority?.toLowerCase();
   if (p !== 'critical' && p !== 'high') return false;
   const dateStr = bean.updated_at ?? bean.created_at;
@@ -376,6 +378,28 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
     ? `${filteredCount} of ${totalCount} beans`
     : `${totalCount} beans`;
 
+  // Collect IDs of all visible beans that have children
+  const idsWithChildren = useMemo(() => {
+    const ids: string[] = [];
+    function collect(list: Bean[]) {
+      for (const b of list) {
+        if (b.children?.length) { ids.push(b.id); collect(b.children); }
+      }
+    }
+    collect(sorted);
+    return ids;
+  }, [sorted]);
+
+  const allExpanded = idsWithChildren.length > 0 && idsWithChildren.every((id) => expanded.get(id));
+
+  const handleExpandCollapseAll = useCallback(() => {
+    if (allExpanded) {
+      setExpanded(new Map());
+    } else {
+      setExpanded(new Map(idsWithChildren.map((id) => [id, true])));
+    }
+  }, [allExpanded, idsWithChildren]);
+
   if (loading) {
     return (
       <div className="flex flex-col h-full">
@@ -435,7 +459,18 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
             </button>
           )}
         </div>
-        <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">{countLabel}</div>
+        <div className="mt-1 flex items-center justify-between">
+          <span className="text-xs text-gray-400 dark:text-gray-500">{countLabel}</span>
+          {idsWithChildren.length > 0 && (
+            <button
+              onClick={handleExpandCollapseAll}
+              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              title={allExpanded ? 'Collapse all' : 'Expand all'}
+            >
+              {allExpanded ? '⊖ collapse all' : '⊕ expand all'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Column headers */}
