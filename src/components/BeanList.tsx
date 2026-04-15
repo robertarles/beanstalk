@@ -188,8 +188,8 @@ function sortBeans(beans: Bean[], sort: SortState): Bean[] {
     } else if (sort.column === 'status') {
       cmp = (a.status || '').localeCompare(b.status || '');
     } else if (sort.column === 'date') {
-      const aDate = a.created_at ?? a.id;
-      const bDate = b.created_at ?? b.id;
+      const aDate = a.updated_at ?? a.created_at ?? a.id;
+      const bDate = b.updated_at ?? b.created_at ?? b.id;
       cmp = aDate.localeCompare(bDate);
     }
     return sort.direction === 'asc' ? cmp : -cmp;
@@ -510,7 +510,7 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
           onClick={() => handleSort('date')}
           className="w-24 text-right hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
         >
-          Date <SortArrow column="date" sort={sort} />
+          Updated <SortArrow column="date" sort={sort} />
         </button>
       </div>
 
@@ -598,7 +598,7 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
 
                     {/* Date (muted, fixed width, right-aligned) */}
                     <span className="w-24 text-xs text-gray-400 dark:text-gray-500 text-right shrink-0">
-                      {formatDate(bean.created_at)}
+                      {formatDate(bean.updated_at ?? bean.created_at)}
                     </span>
                   </div>
 
