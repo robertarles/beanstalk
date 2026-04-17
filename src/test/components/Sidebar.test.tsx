@@ -15,6 +15,8 @@ const defaultProps = {
   onSelectProject: vi.fn(),
   onAddProject: vi.fn(() => Promise.resolve()),
   onRemoveProject: vi.fn(),
+  priorityFilter: [] as string[],
+  onPriorityFilter: vi.fn(),
   statusFilter: [] as string[],
   onStatusFilter: vi.fn(),
   tagFilter: [] as string[],

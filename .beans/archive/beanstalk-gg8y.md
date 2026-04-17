@@ -1,6 +1,5 @@
 ---
-# fix
-title: 'FIX: when editing the priority in beanstalk, clicking save loses the change.'
+title: "FIX: when editing the priority in beanstalk, clicking save loses the change."
 status: completed
 type: task
 priority: normal
