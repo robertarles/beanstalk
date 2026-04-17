@@ -151,7 +151,7 @@ pub fn update_bean(
     assignee: Option<String>,
     body: Option<String>,
     parent: Option<Option<String>>,
-    priority: Option<Option<String>>,
+    priority: Option<String>,
     blocking: Option<Vec<String>>,
     blocked_by: Option<Vec<String>>,
 ) -> Result<Bean, String> {
@@ -164,9 +164,10 @@ pub fn update_bean(
     let new_tags = tags.unwrap_or(existing.tags.clone());
     let new_assignee = assignee.or(existing.assignee.clone());
     let new_body = body.unwrap_or(existing.body.clone());
-    // priority: Some(Some(p)) = set, Some(None) = clear, None = keep existing
+    // priority: Some("") = clear, Some("high") = set, None = keep existing
     let new_priority = match priority {
-        Some(p) => p,
+        Some(ref p) if p.is_empty() => None,
+        Some(p) => Some(p),
         None => existing.priority.clone(),
     };
     // parent: Some(Some(id)) = set parent, Some(None) = clear parent, None = keep existing
