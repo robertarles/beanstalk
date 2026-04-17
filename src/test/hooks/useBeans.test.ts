@@ -23,6 +23,8 @@ const sampleBeans: Bean[] = [
     body: '',
     file_path: '/path/to/bean.md',
     children: [],
+    blocking: [],
+    blocked_by: [],
   },
 ]
 

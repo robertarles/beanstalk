@@ -24,12 +24,16 @@ pub struct Bean {
     pub body: String,
     pub file_path: String,
     pub children: Vec<Bean>,
+    pub blocking: Vec<String>,
+    pub blocked_by: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeansConfig {
     pub name: Option<String>,
     pub statuses: Vec<String>,
+    pub prefix: Option<String>,
+    pub id_length: Option<u32>,
 }
 
 impl Default for BeansConfig {
@@ -42,6 +46,8 @@ impl Default for BeansConfig {
                 "done".to_string(),
                 "archived".to_string(),
             ],
+            prefix: None,
+            id_length: None,
         }
     }
 }
@@ -131,15 +137,18 @@ pub fn parse_bean_file(path: &Path) -> Result<Bean> {
             .map(|s| s.to_string())
     };
 
-    let tags: Vec<String> = fm
-        .get("tags")
-        .and_then(|v| v.as_sequence())
-        .map(|seq| {
-            seq.iter()
-                .filter_map(|item| item.as_str().map(|s| s.to_string()))
-                .collect()
-        })
-        .unwrap_or_default();
+    let get_str_vec = |key: &str| -> Vec<String> {
+        fm.get(key)
+            .and_then(|v| v.as_sequence())
+            .map(|seq| {
+                seq.iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    let tags: Vec<String> = get_str_vec("tags");
 
     // beans stores the ID as a YAML comment (e.g. `# D.-0ajs`), which serde_yaml
     // strips. If `id:` key is absent, extract the ID from the filename stem:
@@ -202,6 +211,8 @@ pub fn parse_bean_file(path: &Path) -> Result<Bean> {
         body,
         file_path: path.to_string_lossy().into_owned(),
         children: Vec::new(),
+        blocking: get_str_vec("blocking"),
+        blocked_by: get_str_vec("blocked_by"),
     })
 }
 
@@ -237,12 +248,16 @@ pub fn parse_beans_config(project_path: &Path) -> BeansConfig {
         }
     };
 
-    let name = raw
+    // The config may be nested under a `beans:` key (project-local format)
+    // or at the top level (legacy format). Prefer the nested form.
+    let root = raw.get("beans").unwrap_or(&raw);
+
+    let name = root
         .get("name")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let statuses: Vec<String> = raw
+    let statuses: Vec<String> = root
         .get("statuses")
         .and_then(|v| v.as_sequence())
         .map(|seq| {
@@ -252,13 +267,23 @@ pub fn parse_beans_config(project_path: &Path) -> BeansConfig {
         })
         .unwrap_or_else(|| BeansConfig::default().statuses);
 
+    let prefix = root
+        .get("prefix")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let id_length = root
+        .get("id_length")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u32);
+
     log::debug!(
-        "parse_beans_config: loaded config name={:?} statuses={:?}",
-        name,
-        statuses
+        "parse_beans_config: loaded config name={:?} prefix={:?} id_length={:?} statuses={:?}",
+        name, prefix, id_length, statuses
     );
 
-    BeansConfig { name, statuses }
+    BeansConfig { name, statuses, prefix, id_length }
 }
 
 // ── Directory scanner (beanstalk-lk35) ──────────────────────────────────────
@@ -433,6 +458,8 @@ mod tests {
             body: String::new(),
             file_path: String::new(),
             children: vec![],
+            blocking: vec![],
+            blocked_by: vec![],
         }
     }
 

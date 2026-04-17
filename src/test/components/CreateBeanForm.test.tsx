@@ -20,6 +20,8 @@ const mockCreatedBean: Bean = {
   body: '',
   file_path: '/project/.beans/new-bean-123.md',
   children: [],
+  blocking: [],
+  blocked_by: [],
 }
 
 const defaultProps = {

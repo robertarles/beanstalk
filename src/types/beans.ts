@@ -12,6 +12,8 @@ export interface Bean {
   body: string;
   file_path: string;
   children: Bean[];
+  blocking: string[];
+  blocked_by: string[];
 }
 
 export interface BeansConfig {

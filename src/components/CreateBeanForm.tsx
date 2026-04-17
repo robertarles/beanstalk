@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Bean } from '../types/beans';
 import { createBean } from '../lib/tauri';
 import { ParentBeanSelect } from './ParentBeanSelect';
+import { RelatedBeansSelect } from './RelatedBeansSelect';
 
 interface CreateBeanFormProps {
   projectPath: string;
@@ -26,6 +27,8 @@ export function CreateBeanForm({
   const [status, setStatus] = useState('todo');
   const [beanType, setBeanType] = useState('task');
   const [parentId, setParentId] = useState<string | null>(null);
+  const [blocking, setBlocking] = useState<string[]>([]);
+  const [blockedBy, setBlockedBy] = useState<string[]>([]);
   const [tags, setTags] = useState('');
   const [assignee, setAssignee] = useState('');
   const [body, setBody] = useState('');
@@ -88,6 +91,8 @@ export function CreateBeanForm({
           tags: tagsArray.length > 0 ? tagsArray : undefined,
           assignee: assignee.trim() || null,
           body: body.trim() || undefined,
+          blocking: blocking.length > 0 ? blocking : undefined,
+          blockedBy: blockedBy.length > 0 ? blockedBy : undefined,
         });
 
         onCreated(bean);
@@ -198,6 +203,28 @@ export function CreateBeanForm({
             beans={allBeans}
             value={parentId}
             onChange={setParentId}
+          />
+        </div>
+
+        {/* Blocking */}
+        <div className="flex flex-col gap-1">
+          <label className={labelClass}>Blocking</label>
+          <RelatedBeansSelect
+            beans={allBeans}
+            value={blocking}
+            onChange={setBlocking}
+            placeholder="Add bean this blocks..."
+          />
+        </div>
+
+        {/* Blocked By */}
+        <div className="flex flex-col gap-1">
+          <label className={labelClass}>Blocked By</label>
+          <RelatedBeansSelect
+            beans={allBeans}
+            value={blockedBy}
+            onChange={setBlockedBy}
+            placeholder="Add bean that blocks this..."
           />
         </div>
 

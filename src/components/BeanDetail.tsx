@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { isAllowedUrl } from '../lib/markdown';
 import { ParentBeanSelect } from './ParentBeanSelect';
+import { RelatedBeansSelect } from './RelatedBeansSelect';
 
 interface BeanDetailProps {
   bean: Bean | null;
@@ -79,6 +80,8 @@ export const BeanDetail = memo(function BeanDetail({
   const [editAssignee, setEditAssignee] = useState('');
   const [editPriority, setEditPriority] = useState<string>('');
   const [editParentId, setEditParentId] = useState<string | null>(null);
+  const [editBlocking, setEditBlocking] = useState<string[]>([]);
+  const [editBlockedBy, setEditBlockedBy] = useState<string[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isOpeningEditor, setIsOpeningEditor] = useState(false);
@@ -92,6 +95,8 @@ export const BeanDetail = memo(function BeanDetail({
       setEditAssignee(bean.assignee || '');
       setEditPriority(bean.priority || '');
       setEditParentId(bean.parent ?? null);
+      setEditBlocking(bean.blocking || []);
+      setEditBlockedBy(bean.blocked_by || []);
     }
     setIsEditing(false);
     setIsDirty(false);
@@ -107,9 +112,11 @@ export const BeanDetail = memo(function BeanDetail({
       editTags !== originalTags ||
       editAssignee !== (bean.assignee || '') ||
       editPriority !== (bean.priority || '') ||
-      editParentId !== (bean.parent ?? null);
+      editParentId !== (bean.parent ?? null) ||
+      JSON.stringify(editBlocking) !== JSON.stringify(bean.blocking || []) ||
+      JSON.stringify(editBlockedBy) !== JSON.stringify(bean.blocked_by || []);
     setIsDirty(dirty);
-  }, [editTitle, editStatus, editTags, editAssignee, editParentId, bean, isEditing]);
+  }, [editTitle, editStatus, editTags, editAssignee, editParentId, editBlocking, editBlockedBy, bean, isEditing]);
 
   const handleEditStart = useCallback(() => {
     if (!bean) return;
@@ -119,6 +126,8 @@ export const BeanDetail = memo(function BeanDetail({
     setEditAssignee(bean.assignee || '');
     setEditPriority(bean.priority || '');
     setEditParentId(bean.parent ?? null);
+    setEditBlocking(bean.blocking || []);
+    setEditBlockedBy(bean.blocked_by || []);
     setIsDirty(false);
     setIsEditing(true);
   }, [bean]);
@@ -143,13 +152,15 @@ export const BeanDetail = memo(function BeanDetail({
         assignee: editAssignee || null,
         priority: editPriority || null,
         parent: editParentId ?? undefined,
+        blocking: editBlocking,
+        blocked_by: editBlockedBy,
       });
       setIsEditing(false);
       setIsDirty(false);
     } finally {
       setIsSaving(false);
     }
-  }, [bean, editTitle, editStatus, editTags, editAssignee, editPriority, editParentId, onSave]);
+  }, [bean, editTitle, editStatus, editTags, editAssignee, editPriority, editParentId, editBlocking, editBlockedBy, onSave]);
 
   const handleOpenInEditor = useCallback(async () => {
     if (!bean) return;
@@ -310,6 +321,34 @@ export const BeanDetail = memo(function BeanDetail({
             value={editParentId}
             onChange={setEditParentId}
             excludeId={bean?.id}
+          />
+        </div>
+
+        {/* Blocking */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            Blocking
+          </label>
+          <RelatedBeansSelect
+            beans={allBeans}
+            value={editBlocking}
+            onChange={setEditBlocking}
+            excludeId={bean?.id}
+            placeholder="Add bean this blocks..."
+          />
+        </div>
+
+        {/* Blocked By */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            Blocked By
+          </label>
+          <RelatedBeansSelect
+            beans={allBeans}
+            value={editBlockedBy}
+            onChange={setEditBlockedBy}
+            excludeId={bean?.id}
+            placeholder="Add bean that blocks this..."
           />
         </div>
 
@@ -494,6 +533,44 @@ export const BeanDetail = memo(function BeanDetail({
                 className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
               >
                 #{tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Blocking */}
+      {bean.blocking && bean.blocking.length > 0 && (
+        <div className="flex items-start gap-2">
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20 shrink-0 pt-0.5">
+            Blocking
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {bean.blocking.map((id) => (
+              <span
+                key={id}
+                className="text-xs px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 font-mono"
+              >
+                {id}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Blocked By */}
+      {bean.blocked_by && bean.blocked_by.length > 0 && (
+        <div className="flex items-start gap-2">
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20 shrink-0 pt-0.5">
+            Blocked By
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {bean.blocked_by.map((id) => (
+              <span
+                key={id}
+                className="text-xs px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-mono"
+              >
+                {id}
               </span>
             ))}
           </div>

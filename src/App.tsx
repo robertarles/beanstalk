@@ -297,6 +297,8 @@ function App() {
           body: fields.body,
           parent: fields.parent,
           priority: fields.priority,
+          blocking: fields.blocking,
+          blockedBy: fields.blocked_by,
         });
         applyBeanUpdate(updated);
         refresh();

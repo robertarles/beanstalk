@@ -69,8 +69,12 @@ pub fn create_bean(
     tags: Option<Vec<String>>,
     assignee: Option<String>,
     body: String,
+    blocking: Option<Vec<String>>,
+    blocked_by: Option<Vec<String>>,
 ) -> Result<Bean, String> {
     let tags = tags.unwrap_or_default();
+    let blocking = blocking.unwrap_or_default();
+    let blocked_by = blocked_by.unwrap_or_default();
     let slug = title
         .split_whitespace()
         .next()
@@ -110,9 +114,11 @@ pub fn create_bean(
         Some(a) => format!("assignee: {}\n", a),
         None => String::new(),
     };
+    let blocking_block = yaml_id_list_block("blocking", &blocking);
+    let blocked_by_block = yaml_id_list_block("blocked_by", &blocked_by);
 
     let content = format!(
-        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}\ncreated_at: {}\nupdated_at: {}\n---\n{}",
+        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}\ncreated_at: {}\nupdated_at: {}\n---\n{}",
         id,
         yaml_quote_str(&title),
         status,
@@ -120,6 +126,8 @@ pub fn create_bean(
         parent_line,
         assignee_line,
         tags_block,
+        blocking_block,
+        blocked_by_block,
         now,
         now,
         body
@@ -144,6 +152,8 @@ pub fn update_bean(
     body: Option<String>,
     parent: Option<Option<String>>,
     priority: Option<Option<String>>,
+    blocking: Option<Vec<String>>,
+    blocked_by: Option<Vec<String>>,
 ) -> Result<Bean, String> {
     let existing = get_bean(project_path.clone(), bean_id.clone())?;
     let file_path_str = existing.file_path.clone();
@@ -164,6 +174,8 @@ pub fn update_bean(
         Some(p) => p,
         None => existing.parent.clone(),
     };
+    let new_blocking = blocking.unwrap_or(existing.blocking.clone());
+    let new_blocked_by = blocked_by.unwrap_or(existing.blocked_by.clone());
 
     let now = chrono_now_iso();
     let created_at = existing.created_at.as_deref().unwrap_or(&now).to_string();
@@ -191,9 +203,11 @@ pub fn update_bean(
         Some(p) => format!("priority: {}\n", p),
         None => String::new(),
     };
+    let blocking_block = yaml_id_list_block("blocking", &new_blocking);
+    let blocked_by_block = yaml_id_list_block("blocked_by", &new_blocked_by);
 
     let content = format!(
-        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}\ncreated_at: {}\nupdated_at: {}\n---\n{}",
+        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}{}\ncreated_at: {}\nupdated_at: {}\n---\n{}",
         existing.id,
         yaml_quote_str(&new_title),
         new_status,
@@ -202,6 +216,8 @@ pub fn update_bean(
         parent_line,
         assignee_line,
         tags_block,
+        blocking_block,
+        blocked_by_block,
         created_at,
         now,
         new_body
@@ -219,7 +235,7 @@ pub fn update_bean_status(
     bean_id: String,
     status: String,
 ) -> Result<Bean, String> {
-    update_bean(project_path, bean_id, None, Some(status), None, None, None, None, None)
+    update_bean(project_path, bean_id, None, Some(status), None, None, None, None, None, None, None)
 }
 
 // ── Search command (beanstalk-lmx4) ─────────────────────────────────────────
@@ -300,6 +316,19 @@ pub fn open_bean_in_editor(project_path: String, bean_id: String) -> Result<(), 
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Generate a YAML block-sequence entry for a list of IDs, or empty string if empty.
+fn yaml_id_list_block(key: &str, ids: &[String]) -> String {
+    if ids.is_empty() {
+        return String::new();
+    }
+    let items = ids
+        .iter()
+        .map(|id| format!("    - {}", id))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("{}:\n{}\n", key, items)
+}
 
 /// Double-quote a string value for safe inclusion in YAML block mappings.
 /// Handles special characters (colons, hashes, brackets, quotes, newlines, etc.)
@@ -441,6 +470,8 @@ mod tests {
             Some(vec![]),
             None,
             "some body".to_string(),
+            None,
+            None,
         );
 
         assert!(result.is_ok(), "create_bean should succeed: {:?}", result);
@@ -471,6 +502,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         );
 
         assert!(result.is_ok(), "create_bean should succeed: {:?}", result);
@@ -579,6 +612,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         );
         assert!(result.is_ok());
 
@@ -609,6 +644,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         )
         .expect("create_bean");
 
@@ -638,6 +675,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         )
         .expect("create open bean");
 
@@ -653,6 +692,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         )
         .expect("create done bean");
 
@@ -686,6 +727,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         )
         .expect("create bean");
 
@@ -717,6 +760,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         )
         .expect("create bean");
 
@@ -724,6 +769,8 @@ mod tests {
             tmp.path().to_string_lossy().to_string(),
             bean.id.clone(),
             Some("Updated Title".to_string()),
+            None,
+            None,
             None,
             None,
             None,
@@ -750,6 +797,8 @@ mod tests {
             tmp.path().to_string_lossy().to_string(),
             "ghost-id-9999".to_string(),
             Some("New Title".to_string()),
+            None,
+            None,
             None,
             None,
             None,
@@ -850,6 +899,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         )
         .expect("create_bean should succeed");
 
@@ -878,6 +929,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         )
         .expect("create_bean should succeed");
 
@@ -885,6 +938,8 @@ mod tests {
             project_path.clone(),
             bean.id.clone(),
             Some(tricky_title.to_string()),
+            None,
+            None,
             None,
             None,
             None,
@@ -917,6 +972,8 @@ mod tests {
             Some(vec![]),
             None,
             "".to_string(),
+            None,
+            None,
         )
         .expect("create_bean should succeed");
 

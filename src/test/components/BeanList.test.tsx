@@ -18,6 +18,8 @@ function makeBean(overrides: Partial<Bean> = {}): Bean {
     body: '',
     file_path: '/project/.beans/bean-001.md',
     children: [],
+    blocking: [],
+    blocked_by: [],
     ...overrides,
   }
 }

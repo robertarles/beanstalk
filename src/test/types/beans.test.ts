@@ -18,6 +18,8 @@ describe('Bean interface', () => {
       body: 'Body text here.',
       file_path: '/project/.beans/bean-test-001.md',
       children: [],
+      blocking: [],
+      blocked_by: [],
     }
 
     expect(bean.id).toBe('bean-test-001')

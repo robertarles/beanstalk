@@ -21,6 +21,8 @@ const mockBean: Bean = {
   body: 'This is the bean body.',
   file_path: '/project/.beans/bean-abc.md',
   children: [],
+  blocking: [],
+  blocked_by: [],
 }
 
 const defaultProps = {

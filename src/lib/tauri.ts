@@ -17,6 +17,8 @@ export const createBean = (params: {
   tags?: string[];
   assignee?: string | null;
   body?: string;
+  blocking?: string[];
+  blockedBy?: string[];
 }) => invoke<Bean>('create_bean', params);
 
 export const updateBean = (params: {
@@ -29,6 +31,8 @@ export const updateBean = (params: {
   body?: string;
   parent?: string | null;
   priority?: string | null;
+  blocking?: string[];
+  blockedBy?: string[];
 }) => invoke<Bean>('update_bean', params);
 
 export const updateBeanStatus = (projectPath: string, beanId: string, status: string) =>
