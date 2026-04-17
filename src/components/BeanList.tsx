@@ -35,7 +35,7 @@ interface BeanListProps {
   toggleExpandRef?: { current: ((id: string) => void) | undefined };
 }
 
-type SortColumn = 'title' | 'status' | 'date';
+type SortColumn = 'title' | 'status' | 'date' | 'priority';
 type SortDirection = 'asc' | 'desc';
 
 interface SortState {
@@ -149,6 +149,17 @@ export function filterByTags(beans: Bean[], tags: string[]): Bean[] {
   }, []);
 }
 
+// --- Priority sort weight ---
+const PRIORITY_WEIGHT: Record<string, number> = {
+  critical: 40,
+  high: 30,
+  normal: 20,
+  low: 10,
+};
+function priorityWeight(p: string | null): number {
+  return PRIORITY_WEIGHT[(p ?? '').toLowerCase()] ?? 0;
+}
+
 // --- Sort top-level beans ---
 function sortBeans(beans: Bean[], sort: SortState): Bean[] {
   return [...beans].sort((a, b) => {
@@ -161,6 +172,8 @@ function sortBeans(beans: Bean[], sort: SortState): Bean[] {
       const aDate = a.updated_at ?? a.created_at ?? a.id;
       const bDate = b.updated_at ?? b.created_at ?? b.id;
       cmp = aDate.localeCompare(bDate);
+    } else if (sort.column === 'priority') {
+      cmp = priorityWeight(a.priority) - priorityWeight(b.priority);
     }
     return sort.direction === 'asc' ? cmp : -cmp;
   });
@@ -485,7 +498,12 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
         >
           Title <SortArrow column="title" sort={sort} />
         </button>
-        <span className="w-20 shrink-0 text-left">Priority</span>
+        <button
+          onClick={() => handleSort('priority')}
+          className="w-20 shrink-0 text-left hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+        >
+          Priority <SortArrow column="priority" sort={sort} />
+        </button>
         <button
           onClick={() => handleSort('status')}
           className="w-20 text-left hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
