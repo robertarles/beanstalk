@@ -101,9 +101,9 @@ pub fn create_bean(
         .collect::<Vec<_>>()
         .join("\n");
     let tags_block = if tags.is_empty() {
-        "tags: []".to_string()
+        "tags: []\n".to_string()
     } else {
-        format!("tags:\n{}", tags_yaml)
+        format!("tags:\n{}\n", tags_yaml)
     };
 
     let parent_line = match &parent {
@@ -118,7 +118,7 @@ pub fn create_bean(
     let blocked_by_block = yaml_id_list_block("blocked_by", &blocked_by);
 
     let content = format!(
-        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}\ncreated_at: {}\nupdated_at: {}\n---\n{}",
+        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}created_at: {}\nupdated_at: {}\n---\n{}",
         id,
         yaml_quote_str(&title),
         status,
@@ -187,9 +187,9 @@ pub fn update_bean(
         .collect::<Vec<_>>()
         .join("\n");
     let tags_block = if new_tags.is_empty() {
-        "tags: []".to_string()
+        "tags: []\n".to_string()
     } else {
-        format!("tags:\n{}", tags_yaml)
+        format!("tags:\n{}\n", tags_yaml)
     };
 
     let parent_line = match &new_parent {
@@ -208,7 +208,7 @@ pub fn update_bean(
     let blocked_by_block = yaml_id_list_block("blocked_by", &new_blocked_by);
 
     let content = format!(
-        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}{}\ncreated_at: {}\nupdated_at: {}\n---\n{}",
+        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}{}created_at: {}\nupdated_at: {}\n---\n{}",
         existing.id,
         yaml_quote_str(&new_title),
         new_status,

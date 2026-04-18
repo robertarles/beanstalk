@@ -596,7 +596,32 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
                     </span>
 
                     {/* Status label (muted, fixed width) */}
-                    <span className="w-20 text-xs text-gray-400 dark:text-gray-500 truncate capitalize shrink-0">
+                    <span className="w-20 text-xs text-gray-400 dark:text-gray-500 truncate capitalize shrink-0 flex items-center gap-0.5">
+                      {(bean.blocked_by.length > 0 || bean.blocking.length > 0) && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const relatedId = bean.blocked_by[0] ?? bean.blocking[0];
+                            onSelect(relatedId);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.stopPropagation();
+                              const relatedId = bean.blocked_by[0] ?? bean.blocking[0];
+                              onSelect(relatedId);
+                            }
+                          }}
+                          title={[
+                            bean.blocked_by.length > 0 ? `Blocked by: ${bean.blocked_by.join(', ')}` : '',
+                            bean.blocking.length > 0 ? `Blocking: ${bean.blocking.join(', ')}` : '',
+                          ].filter(Boolean).join('\n')}
+                          className="shrink-0 leading-none cursor-pointer"
+                        >
+                          🛑
+                        </span>
+                      )}
                       {bean.status}
                     </span>
 
