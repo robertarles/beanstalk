@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use crate::beans::{parse_bean_file, scan_beans_directory, build_tree, Bean};
+use crate::beans::{parse_bean_file, parse_beans_config, scan_beans_directory, build_tree, Bean};
 
 // ── Read commands (beanstalk-h9hz) ──────────────────────────────────────────
 
@@ -23,6 +23,26 @@ pub fn get_bean(project_path: String, bean_id: String) -> Result<Bean, String> {
 }
 
 // ── Create command (beanstalk-o6fz) ─────────────────────────────────────────
+
+/// Convert a title to a filename-safe slug.
+///
+/// Lowercases the string, replaces every non-alphanumeric character with `-`,
+/// collapses consecutive dashes, and trims leading/trailing dashes.
+///
+/// "FEAT: add a file browser" → "feat-add-a-file-browser"
+fn title_to_slug(title: &str) -> String {
+    let mut slug: String = title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    // Collapse consecutive dashes.
+    while slug.contains("--") {
+        slug = slug.replace("--", "-");
+    }
+    let slug = slug.trim_matches('-');
+    if slug.is_empty() { "bean".to_string() } else { slug.to_string() }
+}
 
 /// Generate a short random ID suffix using timestamp nanoseconds encoded in
 /// base-36. We take the last 4 characters to keep IDs short.
@@ -75,35 +95,37 @@ pub fn create_bean(
     let tags = tags.unwrap_or_default();
     let blocking = blocking.unwrap_or_default();
     let blocked_by = blocked_by.unwrap_or_default();
-    let slug = title
-        .split_whitespace()
-        .next()
-        .unwrap_or("bean")
-        .to_lowercase()
-        .chars()
-        .filter(|c| c.is_alphanumeric() || *c == '-')
-        .collect::<String>();
 
-    let id = format!("{}-{}", slug, random_suffix());
+    // Read the project's .beans.yml to get the configured prefix.
+    let beans_cfg = parse_beans_config(Path::new(&project_path));
+    let prefix = beans_cfg.prefix.as_deref().unwrap_or("bean-");
+
+    // Canonical id: {prefix}{random_4chars}  e.g. "beanstalk-9w17"
+    let id = format!("{}{}", prefix, random_suffix());
+    // Slug: full title → filename-safe lowercase string
+    let slug = title_to_slug(&title);
+    // Filename: {id}--{slug}.md  e.g. "beanstalk-9w17--feat-add-a-file-browser.md"
+    let filename = format!("{}--{}.md", id, slug);
 
     // Ensure the .beans directory exists.
     let beans_dir = Path::new(&project_path).join(".beans");
     std::fs::create_dir_all(&beans_dir)
         .map_err(|e| format!("Failed to create .beans directory: {e}"))?;
 
-    let file_path = beans_dir.join(format!("{}.md", id));
+    let file_path = beans_dir.join(&filename);
 
     // Build YAML frontmatter.
     let now = chrono_now_iso();
-    let tags_yaml = tags
-        .iter()
-        .map(|t| format!("  - {}", t))
-        .collect::<Vec<_>>()
-        .join("\n");
+    // Tags block: omit entirely when empty (consistent with beans CLI).
     let tags_block = if tags.is_empty() {
-        "tags: []\n".to_string()
+        String::new()
     } else {
-        format!("tags:\n{}\n", tags_yaml)
+        let items = tags
+            .iter()
+            .map(|t| format!("    - {}", t))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("tags:\n{}\n", items)
     };
 
     let parent_line = match &parent {
@@ -117,8 +139,9 @@ pub fn create_bean(
     let blocking_block = yaml_id_list_block("blocking", &blocking);
     let blocked_by_block = yaml_id_list_block("blocked_by", &blocked_by);
 
+    // Frontmatter id is written as a YAML comment `# {id}` (beans CLI format).
     let content = format!(
-        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}created_at: {}\nupdated_at: {}\n---\n{}",
+        "---\n# {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}created_at: {}\nupdated_at: {}\n---\n{}",
         id,
         yaml_quote_str(&title),
         status,
@@ -439,6 +462,34 @@ mod tests {
         }
     }
 
+    // ── title_to_slug tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_title_to_slug_basic() {
+        assert_eq!(title_to_slug("Hello World"), "hello-world");
+    }
+
+    #[test]
+    fn test_title_to_slug_colon_prefix() {
+        // "FEAT: add a file browser" → "feat-add-a-file-browser"
+        assert_eq!(title_to_slug("FEAT: add a file browser"), "feat-add-a-file-browser");
+        assert_eq!(title_to_slug("FIX: move the button"), "fix-move-the-button");
+    }
+
+    #[test]
+    fn test_title_to_slug_special_chars() {
+        // Special characters become dashes, consecutive dashes collapse.
+        assert_eq!(title_to_slug("hello--world"), "hello-world");
+        assert_eq!(title_to_slug("  spaces  "), "spaces");
+        assert_eq!(title_to_slug("a/b\\c"), "a-b-c");
+    }
+
+    #[test]
+    fn test_title_to_slug_empty() {
+        assert_eq!(title_to_slug(""), "bean");
+        assert_eq!(title_to_slug(":::"), "bean");
+    }
+
     // ── beanstalk-zc3m: generate_id_format ───────────────────────────────────
 
     #[test]
@@ -478,9 +529,8 @@ mod tests {
         assert!(result.is_ok(), "create_bean should succeed: {:?}", result);
         let bean = result.unwrap();
 
-        let expected_file = PathBuf::from(&project_path)
-            .join(".beans")
-            .join(format!("{}.md", bean.id));
+        // Use the file_path reported by the bean — it holds the actual canonical path.
+        let expected_file = PathBuf::from(&bean.file_path);
 
         assert!(
             expected_file.exists(),
@@ -510,16 +560,14 @@ mod tests {
         assert!(result.is_ok(), "create_bean should succeed: {:?}", result);
         let bean = result.unwrap();
 
-        let file_path = PathBuf::from(&project_path)
-            .join(".beans")
-            .join(format!("{}.md", bean.id));
-
-        let content = fs::read_to_string(&file_path).expect("read bean file");
+        let content = fs::read_to_string(&bean.file_path).expect("read bean file");
 
         assert!(content.starts_with("---\n"), "file should start with '---' frontmatter delimiter");
         // Title is double-quoted for YAML safety.
         assert!(content.contains("\"Frontmatter Bean\""), "file should contain the quoted title in frontmatter");
         assert!(content.contains("---"), "file should have closing '---' delimiter");
+        // Filename format: {id}--{slug}.md
+        assert!(bean.file_path.contains("--frontmatter-bean"), "filename should contain slug from title");
     }
 
     // ── beanstalk-7kwy: get_beans / get_bean tests ───────────────────────────
