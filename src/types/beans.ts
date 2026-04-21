@@ -30,4 +30,5 @@ export interface AppConfig {
   projects: Project[];
   last_active_project: string | null;
   editor: string | null;
+  recent_projects: string[];
 }

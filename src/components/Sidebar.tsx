@@ -11,6 +11,7 @@ interface SidebarProps {
   onSelectProject: (path: string) => void;
   /** Called with the new project path after the user confirms in the dialog. */
   onAddProject?: (path: string) => Promise<void>;
+  recentProjects?: string[];
   /** Called with the project path to remove after the user confirms inline. */
   onRemoveProject?: (path: string) => void;
   priorityFilter: string[];
@@ -30,6 +31,7 @@ export const Sidebar = memo(function Sidebar({
   onSelectProject,
   onAddProject,
   onRemoveProject,
+  recentProjects = [],
   priorityFilter,
   onPriorityFilter,
   statusFilter,
@@ -363,6 +365,7 @@ export const Sidebar = memo(function Sidebar({
         <AddProjectDialog
           onAdd={onAddProject ?? (() => Promise.resolve())}
           onClose={() => setShowAddDialog(false)}
+          recentProjects={recentProjects}
         />
       )}
     </div>

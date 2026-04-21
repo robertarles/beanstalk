@@ -28,12 +28,15 @@ pub fn add_project(path: String) -> Result<AppConfig, String> {
 
     let mut config = load_config();
 
-    // Avoid duplicates
-    if config.projects.iter().any(|p| p.path == path) {
-        return Ok(config);
-    }
+    // Maintain recents list: move path to front, deduplicate, cap at 10
+    config.recent_projects.retain(|p| p != &path);
+    config.recent_projects.insert(0, path.clone());
+    config.recent_projects.truncate(10);
 
-    config.projects.push(Project { path, name });
+    // Avoid duplicates in the active projects list
+    if !config.projects.iter().any(|p| p.path == path) {
+        config.projects.push(Project { path, name });
+    }
 
     save_config(&config).map_err(|e| e.to_string())?;
 

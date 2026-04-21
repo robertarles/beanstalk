@@ -10,6 +10,7 @@ const sampleConfig: AppConfig = {
   projects: [{ path: '/path/to/project', name: 'My Project' }],
   last_active_project: '/path/to/project',
   editor: null,
+  recent_projects: ['/path/to/project'],
 }
 
 const updatedConfig: AppConfig = {
@@ -19,6 +20,7 @@ const updatedConfig: AppConfig = {
   ],
   last_active_project: '/path/to/project',
   editor: null,
+  recent_projects: ['/path/to/other', '/path/to/project'],
 }
 
 beforeEach(() => {

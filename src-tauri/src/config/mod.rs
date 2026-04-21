@@ -17,6 +17,8 @@ pub struct AppConfig {
     pub projects: Vec<Project>,
     pub last_active_project: Option<String>,
     pub editor: Option<String>,
+    #[serde(default)]
+    pub recent_projects: Vec<String>,
 }
 
 impl Default for AppConfig {
@@ -25,6 +27,7 @@ impl Default for AppConfig {
             projects: vec![],
             last_active_project: None,
             editor: None,
+            recent_projects: vec![],
         }
     }
 }
@@ -195,6 +198,7 @@ mod tests {
             }],
             last_active_project: None,
             editor: None,
+            recent_projects: vec![],
         };
 
         save_config_to(&cfg, &path).unwrap();
@@ -223,6 +227,7 @@ mod tests {
             ],
             last_active_project: Some("/tmp/alpha".to_string()),
             editor: Some("code".to_string()),
+            recent_projects: vec!["/tmp/alpha".to_string()],
         };
 
         save_config_to(&original, &path).unwrap();

@@ -381,6 +381,7 @@ function App() {
             onSelectProject={handleSelectProject}
             onAddProject={handleAddProject}
             onRemoveProject={handleRemoveProject}
+            recentProjects={config?.recent_projects ?? []}
             priorityFilter={priorityFilter}
             onPriorityFilter={setPriorityFilter}
             statusFilter={statusFilter}

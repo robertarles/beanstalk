@@ -3,9 +3,10 @@ import { useState, useRef, useEffect } from 'react';
 interface AddProjectDialogProps {
   onAdd: (path: string) => Promise<void>;
   onClose: () => void;
+  recentProjects?: string[];
 }
 
-export function AddProjectDialog({ onAdd, onClose }: AddProjectDialogProps) {
+export function AddProjectDialog({ onAdd, onClose, recentProjects = [] }: AddProjectDialogProps) {
   const [path, setPath] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -24,13 +25,7 @@ export function AddProjectDialog({ onAdd, onClose }: AddProjectDialogProps) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = path.trim();
-    if (!trimmed) {
-      setError('Path must not be empty.');
-      return;
-    }
+  const submit = async (trimmed: string) => {
     setError(null);
     setSubmitting(true);
     try {
@@ -41,6 +36,22 @@ export function AddProjectDialog({ onAdd, onClose }: AddProjectDialogProps) {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = path.trim();
+    if (!trimmed) {
+      setError('Path must not be empty.');
+      return;
+    }
+    await submit(trimmed);
+  };
+
+  const handleRecentSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = e.target.value;
+    if (!selected) return;
+    await submit(selected);
   };
 
   return (
@@ -55,6 +66,29 @@ export function AddProjectDialog({ onAdd, onClose }: AddProjectDialogProps) {
         <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">
           Add Project
         </h2>
+
+        {recentProjects.length > 0 && (
+          <div className="mb-4">
+            <label
+              htmlFor="recent-projects"
+              className="block text-sm text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Recent projects
+            </label>
+            <select
+              id="recent-projects"
+              defaultValue=""
+              onChange={handleRecentSelect}
+              disabled={submitting}
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              <option value="" disabled>— select a recent project —</option>
+              {recentProjects.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} noValidate>
           <label
