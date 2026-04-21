@@ -15,6 +15,7 @@ interface BeanDetailProps {
   availableStatuses: string[];
   allBeans?: Bean[];
   onSave?: (fields: Partial<Bean>) => void | Promise<void>;
+  onTouch?: () => void | Promise<void>;
   projectPath?: string;
   /** Register an Escape handler with the keyboard nav system. Priority 20 — cancels edit mode. */
   registerEscapeHandler?: (priority: number, handler: () => boolean) => () => void;
@@ -69,6 +70,7 @@ export const BeanDetail = memo(function BeanDetail({
   availableStatuses,
   allBeans = [],
   onSave = () => {},
+  onTouch,
   projectPath = '',
   registerEscapeHandler,
   onEditStartRef,
@@ -85,6 +87,7 @@ export const BeanDetail = memo(function BeanDetail({
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isOpeningEditor, setIsOpeningEditor] = useState(false);
+  const [isTouching, setIsTouching] = useState(false);
 
   // Reset edit state whenever the bean changes
   useEffect(() => {
@@ -174,6 +177,16 @@ export const BeanDetail = memo(function BeanDetail({
       setTimeout(() => setIsOpeningEditor(false), 1000);
     }
   }, [bean, projectPath, onOpenInEditor]);
+
+  const handleTouch = useCallback(async () => {
+    if (!bean || !onTouch) return;
+    setIsTouching(true);
+    try {
+      await onTouch();
+    } finally {
+      setIsTouching(false);
+    }
+  }, [bean, onTouch]);
 
   // Expose dirty check for parent — via window-level beforeunload (lightweight approach)
   // The unsaved-changes warning when switching beans is handled below via a prop pattern.
@@ -404,6 +417,16 @@ export const BeanDetail = memo(function BeanDetail({
           >
             {isOpeningEditor ? 'Opening…' : 'Open in Editor'}
           </button>
+          {onTouch && (
+            <button
+              onClick={handleTouch}
+              disabled={isTouching}
+              title="Update updated_at to now"
+              className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+            >
+              {isTouching ? 'Touching…' : 'Touch'}
+            </button>
+          )}
         </div>
 
         {/* ID (read-only reference) */}

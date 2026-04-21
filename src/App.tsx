@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import type { Bean } from './types/beans';
-import { updateBean, updateBeanStatus, openBeanInEditor, startWatching, stopWatching } from './lib/tauri';
+import { updateBean, updateBeanStatus, touchBean, openBeanInEditor, startWatching, stopWatching } from './lib/tauri';
 import { CreateBeanForm } from './components/CreateBeanForm';
 import { useConfig } from './hooks/useConfig';
 import { useBeans } from './hooks/useBeans';
@@ -315,6 +315,19 @@ function App() {
     // BeanDetail handles opening in editor internally
   }, []);
 
+  const handleTouch = useCallback(async () => {
+    if (!activeProject || !selectedBeanId) return;
+    try {
+      const updated = await touchBean(activeProject, selectedBeanId);
+      applyBeanUpdate(updated);
+      refresh();
+      showToast('updated_at refreshed', 'success');
+    } catch (err) {
+      console.error('Failed to touch bean:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to touch bean', 'error');
+    }
+  }, [activeProject, selectedBeanId, applyBeanUpdate, refresh, showToast]);
+
   // Sync selectedBeanIndex when selectedBeanId changes due to clicks
   useEffect(() => {
     if (selectedBeanId === null) {
@@ -421,6 +434,7 @@ function App() {
               onStatusChange={handleStatusChange}
               onPriorityChange={handlePriorityChange}
               onSave={handleSave}
+              onTouch={handleTouch}
               availableStatuses={availableStatuses}
               allBeans={beans}
               projectPath={activeProject ?? undefined}

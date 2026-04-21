@@ -44,6 +44,9 @@ export const updateBean = (params: {
 export const updateBeanStatus = (projectPath: string, beanId: string, status: string) =>
   invoke<Bean>('update_bean_status', { projectPath, beanId, status });
 
+export const touchBean = (projectPath: string, beanId: string) =>
+  invoke<Bean>('update_bean', { projectPath, beanId });
+
 export const searchBeans = (
   projectPath: string,
   query: string,
