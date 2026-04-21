@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { pickProjectFolder } from '../lib/tauri';
 
 interface AddProjectDialogProps {
   onAdd: (path: string) => Promise<void>;
@@ -10,6 +11,7 @@ export function AddProjectDialog({ onAdd, onClose, recentProjects = [] }: AddPro
   const [path, setPath] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -52,6 +54,22 @@ export function AddProjectDialog({ onAdd, onClose, recentProjects = [] }: AddPro
     const selected = e.target.value;
     if (!selected) return;
     await submit(selected);
+  };
+
+  const handleBrowse = async () => {
+    setBrowsing(true);
+    try {
+      const selected = await pickProjectFolder();
+      if (selected) {
+        setPath(selected);
+        setError(null);
+        inputRef.current?.focus();
+      }
+    } catch {
+      // User cancelled or dialog unavailable — silently ignore
+    } finally {
+      setBrowsing(false);
+    }
   };
 
   return (
@@ -97,19 +115,29 @@ export function AddProjectDialog({ onAdd, onClose, recentProjects = [] }: AddPro
           >
             Project directory path
           </label>
-          <input
-            ref={inputRef}
-            id="project-path"
-            type="text"
-            value={path}
-            onChange={(e) => {
-              setPath(e.target.value);
-              if (error) setError(null);
-            }}
-            placeholder="/path/to/project"
-            className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={submitting}
-          />
+          <div className="flex gap-2">
+            <input
+              ref={inputRef}
+              id="project-path"
+              type="text"
+              value={path}
+              onChange={(e) => {
+                setPath(e.target.value);
+                if (error) setError(null);
+              }}
+              placeholder="/path/to/project"
+              className="flex-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={submitting}
+            />
+            <button
+              type="button"
+              onClick={handleBrowse}
+              disabled={submitting || browsing}
+              className="px-3 py-2 rounded-md text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+            >
+              {browsing ? '…' : 'Browse…'}
+            </button>
+          </div>
 
           {error && (
             <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>

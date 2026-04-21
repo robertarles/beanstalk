@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# .githooks/prepare-commit-msg
+#
+# Pre-populates the commit editor with a Conventional Commits template
+# and reminder. Only fires for interactive commits — skipped for -m, -F,
+# merges, squashes, and amends with an existing message.
+#
+# Installed via: git config core.hooksPath .githooks
+# (convgitinit.sh sets this up automatically)
+
+set -eu
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="${2:-}"
+
+# Skip when message already supplied
+case "$COMMIT_SOURCE" in
+  message|template|merge|squash|commit) exit 0 ;;
+esac
+
+# Skip if editor already has non-comment content (e.g. amend)
+if [[ -n "$(grep -v '^\s*#' "$COMMIT_MSG_FILE" 2>/dev/null | tr -d '[:space:]')" ]]; then
+  exit 0
+fi
+
+# Load shared config if installed globally
+CONFIG="${CGIT_CONFIG:-$HOME/.config/conventional-git/config.sh}"
+if [[ -r "$CONFIG" ]]; then
+  # shellcheck source=/dev/null
+  source "$CONFIG"
+fi
+
+# Hard-coded fallback so the hook works even without a global install
+if [[ -z "${CGIT_TYPES:-}" ]]; then
+  CGIT_TYPES=(
+    "feat:A new feature"
+    "fix:A bug fix"
+    "docs:Documentation only"
+    "refactor:Neither fix nor feature"
+    "perf:Performance"
+    "test:Tests"
+    "build:Build/deps"
+    "ci:CI config"
+    "chore:Maintenance"
+  )
+fi
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+if [[ -r "$repo_root/.conventional-git-scopes" ]]; then
+  scopes=$(grep -v '^\s*\(#\|$\)' "$repo_root/.conventional-git-scopes" | tr '\n' ' ')
+else
+  scopes="${CGIT_DEFAULT_SCOPES[*]:-api cli ci config deps docs tests}"
+fi
+
+# Derive a type guess from the branch name (feat/foo-bar → "feat")
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+guess_type=""
+if [[ "$branch" =~ ^([a-z]+)/ ]]; then
+  guess_type="${BASH_REMATCH[1]}"
+  case "$guess_type" in
+    hotfix)            guess_type="fix" ;;
+    spike|experiment)  guess_type="chore" ;;
+    release)           guess_type="chore" ;;
+  esac
+fi
+
+# Build the type display block
+type_block=""
+for entry in "${CGIT_TYPES[@]}"; do
+  t="${entry%%:*}"
+  d="${entry#*:}"
+  type_block+="#   ${t}"$'\t'"— ${d}"$'\n'
+done
+
+# First line: either a guess or a placeholder. Then append the guide block.
+seed_line=""
+if [[ -n "$guess_type" ]]; then
+  seed_line="${guess_type}: "
+fi
+
+# The template is injected ABOVE the existing file content (which holds
+# git's own "# Please enter the commit message..." block and status).
+{
+  echo "$seed_line"
+  echo ""
+  echo "# <type>(<scope>): <subject>"
+  echo "#"
+  echo "# [body — wrap at 72 chars, explain WHY, not what]"
+  echo "#"
+  echo "# [footer(s) — BREAKING CHANGE: ..., Closes #123]"
+  echo "#"
+  echo "# ─────────────────────────────────────────────────────────────"
+  echo "# TYPES:"
+  printf '%s' "$type_block"
+  echo "#"
+  echo "# SCOPES (this repo): ${scopes}"
+  echo "#"
+  echo "# RULES:"
+  echo "#   • subject: imperative mood (\"add\" not \"added\"), ≤50 chars, no period"
+  echo "#   • body:    wrap at 72, explain WHY"
+  echo "#   • breaking: use \"type!:\" AND \"BREAKING CHANGE:\" footer"
+  echo "#"
+  echo "# EXAMPLES:"
+  echo "#   feat(cli): add --json output flag"
+  echo "#   fix(api): handle null response from /users endpoint"
+  echo "#   feat(auth)!: switch from JWT to session cookies"
+  echo "#"
+  echo "#   BREAKING CHANGE: clients must send cookies, not Bearer tokens."
+  echo "# ─────────────────────────────────────────────────────────────"
+  cat "$COMMIT_MSG_FILE"
+} > "$COMMIT_MSG_FILE.tmp" && mv "$COMMIT_MSG_FILE.tmp" "$COMMIT_MSG_FILE"

@@ -8,8 +8,29 @@ pub fn get_config() -> AppConfig {
     load_config()
 }
 
+/// Normalize a user-supplied path to a project root directory.
+///
+/// If the path points inside a `.beans/` subdirectory (e.g. a bean file path
+/// like `/project/.beans/bean-xyz.md`), strip back to the project root so
+/// that only proper project directory paths end up in `recent_projects`.
+fn normalize_project_path(path: &str) -> String {
+    let trimmed = path.trim_end_matches('/').trim_end_matches('\\');
+    // Find the last occurrence of "/.beans" and take everything before it.
+    if let Some(pos) = trimmed.rfind("/.beans") {
+        return trimmed[..pos].to_string();
+    }
+    // Also handle Windows-style separator.
+    if let Some(pos) = trimmed.rfind("\\.beans") {
+        return trimmed[..pos].to_string();
+    }
+    trimmed.to_string()
+}
+
 #[tauri::command]
 pub fn add_project(path: String) -> Result<AppConfig, String> {
+    // Normalize to project root in case the user passed a path inside .beans/.
+    let path = normalize_project_path(&path);
+
     // Validate that path/.beans/ directory exists
     let beans_dir = Path::new(&path).join(".beans");
     if !beans_dir.is_dir() {

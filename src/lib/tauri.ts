@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl as tauriOpenUrl } from '@tauri-apps/plugin-opener';
+import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import type { Bean, AppConfig } from '../types/beans';
 
 export const getBeans = (projectPath: string) =>
@@ -74,3 +75,7 @@ export const startWatching = (projectPath: string) => invoke<void>('start_watchi
 export const stopWatching = (projectPath: string) => invoke<void>('stop_watching', { projectPath });
 
 export const openUrl = (url: string): Promise<void> => tauriOpenUrl(url);
+
+export const pickProjectFolder = (): Promise<string | null> =>
+  dialogOpen({ directory: true, multiple: false, title: 'Select Project Directory' })
+    .then((result) => (typeof result === 'string' ? result : null));
