@@ -417,16 +417,6 @@ export const BeanDetail = memo(function BeanDetail({
           >
             {isOpeningEditor ? 'Opening…' : 'Open in Editor'}
           </button>
-          {onTouch && (
-            <button
-              onClick={handleTouch}
-              disabled={isTouching}
-              title="Update updated_at to now"
-              className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
-            >
-              {isTouching ? 'Touching…' : 'Touch'}
-            </button>
-          )}
         </div>
 
         {/* ID (read-only reference) */}
@@ -445,7 +435,18 @@ export const BeanDetail = memo(function BeanDetail({
   return (
     <div className="flex flex-col h-full p-6 gap-4 overflow-y-auto">
       {/* Toolbar — above title */}
-      <div className="flex items-center gap-2 justify-end">
+      <div className="flex items-center gap-2">
+        {onTouch && (
+          <button
+            onClick={handleTouch}
+            disabled={isTouching}
+            title="Update updated_at to now"
+            className="text-xs px-2.5 py-1 rounded border border-blue-200 dark:border-blue-800 text-blue-400 dark:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors disabled:opacity-50"
+          >
+            {isTouching ? 'Touching…' : 'Touch'}
+          </button>
+        )}
+        <div className="flex-1" />
         <button
           onClick={handleEditStart}
           className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
