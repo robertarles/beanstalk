@@ -14,6 +14,7 @@ export const createBean = (params: {
   title: string;
   status: string;
   beanType?: string;
+  priority?: string;
   parent?: string | null;
   tags?: string[];
   assignee?: string | null;
