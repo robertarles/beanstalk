@@ -37,7 +37,7 @@ const SECTIONS: Section[] = [
       { keys: 'Enter', description: 'Open bean in detail panel' },
       { keys: 'i', description: 'Open selected bean in editor' },
       { keys: 'e', description: 'Enter inline edit mode' },
-      { keys: 'n / c', description: 'Open new bean form' },
+      { keys: 'n / a', description: 'Open new bean form' },
       { keys: 's', description: 'Cycle status forward' },
       { keys: 'y', description: 'Copy bean ID to clipboard' },
     ],
