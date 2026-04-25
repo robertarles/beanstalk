@@ -491,6 +491,7 @@ export const BeanDetail = memo(function BeanDetail({
         </span>
         <div className="relative inline-flex items-center">
           <select
+            aria-label="Status"
             value={bean.status}
             onChange={(e) => onStatusChange(e.target.value)}
             className={`appearance-none text-xs font-semibold px-2.5 py-1 pr-6 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-400 ${statusBadgeClass(bean.status)}`}
