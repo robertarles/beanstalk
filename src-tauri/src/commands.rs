@@ -88,6 +88,7 @@ pub fn create_bean(
     parent: Option<String>,
     tags: Option<Vec<String>>,
     assignee: Option<String>,
+    priority: Option<String>,
     body: String,
     blocking: Option<Vec<String>>,
     blocked_by: Option<Vec<String>>,
@@ -136,18 +137,23 @@ pub fn create_bean(
         Some(a) => format!("assignee: {}\n", a),
         None => String::new(),
     };
+    let priority_line = match &priority {
+        Some(p) if !p.is_empty() => format!("priority: {}\n", p),
+        _ => String::new(),
+    };
     let blocking_block = yaml_id_list_block("blocking", &blocking);
     let blocked_by_block = yaml_id_list_block("blocked_by", &blocked_by);
 
     // Frontmatter id is written as a YAML comment `# {id}` (beans CLI format).
     let content = format!(
-        "---\n# {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}created_at: {}\nupdated_at: {}\n---\n{}",
+        "---\n# {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}{}created_at: {}\nupdated_at: {}\n---\n{}",
         id,
         yaml_quote_str(&title),
         status,
         bean_type,
         parent_line,
         assignee_line,
+        priority_line,
         tags_block,
         blocking_block,
         blocked_by_block,
@@ -521,6 +527,7 @@ mod tests {
             None,
             Some(vec![]),
             None,
+            None,
             "some body".to_string(),
             None,
             None,
@@ -551,6 +558,7 @@ mod tests {
             "task".to_string(),
             None,
             Some(vec![]),
+            None,
             None,
             "".to_string(),
             None,
@@ -660,6 +668,7 @@ mod tests {
             None,
             Some(vec![]),
             None,
+            None,
             "".to_string(),
             None,
             None,
@@ -692,6 +701,7 @@ mod tests {
             None,
             Some(vec![]),
             None,
+            None,
             "".to_string(),
             None,
             None,
@@ -723,6 +733,7 @@ mod tests {
             None,
             Some(vec![]),
             None,
+            None,
             "".to_string(),
             None,
             None,
@@ -739,6 +750,7 @@ mod tests {
             "task".to_string(),
             None,
             Some(vec![]),
+            None,
             None,
             "".to_string(),
             None,
@@ -775,6 +787,7 @@ mod tests {
             None,
             Some(vec![]),
             None,
+            None,
             "".to_string(),
             None,
             None,
@@ -807,6 +820,7 @@ mod tests {
             "task".to_string(),
             None,
             Some(vec![]),
+            None,
             None,
             "".to_string(),
             None,
@@ -947,6 +961,7 @@ mod tests {
             None,
             Some(vec![]),
             None,
+            None,
             "".to_string(),
             None,
             None,
@@ -976,6 +991,7 @@ mod tests {
             "task".to_string(),
             None,
             Some(vec![]),
+            None,
             None,
             "".to_string(),
             None,
@@ -1020,6 +1036,7 @@ mod tests {
             None,
             Some(vec![]),
             None,
+            None,
             "".to_string(),
             None,
             None,
@@ -1039,5 +1056,87 @@ mod tests {
         let on_disk = get_bean(project_path, bean.id).expect("get_bean should find updated bean");
         assert_eq!(on_disk.title, tricky_title, "title on disk must be preserved");
         assert_eq!(on_disk.status, "done", "status on disk must be 'done'");
+    }
+
+    // ── priority round-trip tests (beanstalk-xgaq fix) ───────────────────────
+
+    #[test]
+    fn test_create_bean_with_priority_roundtrips() {
+        // A priority value passed to create_bean should appear in the written file
+        // and be returned in the Bean struct (round-trip).
+        let tmp = TempDir::new("create_priority");
+        let project_path = tmp.path().to_string_lossy().to_string();
+
+        let bean = create_bean(
+            project_path.clone(),
+            "Priority Bean".to_string(),
+            "open".to_string(),
+            "task".to_string(),
+            None,
+            Some(vec![]),
+            None,
+            Some("high".to_string()),
+            "".to_string(),
+            None,
+            None,
+        )
+        .expect("create_bean should succeed");
+
+        // Priority must be returned in the Bean struct.
+        assert_eq!(
+            bean.priority.as_deref(),
+            Some("high"),
+            "priority must be 'high' in returned Bean"
+        );
+
+        // Priority must be written to the file on disk.
+        let content = fs::read_to_string(&bean.file_path).expect("read bean file");
+        assert!(
+            content.contains("priority: high"),
+            "file on disk must contain 'priority: high', got:\n{}",
+            content
+        );
+
+        // Re-read from disk to confirm round-trip.
+        let on_disk = get_bean(project_path, bean.id).expect("get_bean should find created bean");
+        assert_eq!(
+            on_disk.priority.as_deref(),
+            Some("high"),
+            "priority on disk must match original after re-read"
+        );
+    }
+
+    #[test]
+    fn test_create_bean_without_priority_omits_field() {
+        // When priority is None, the frontmatter must not contain a priority line.
+        let tmp = TempDir::new("create_no_priority");
+        let project_path = tmp.path().to_string_lossy().to_string();
+
+        let bean = create_bean(
+            project_path.clone(),
+            "No Priority Bean".to_string(),
+            "open".to_string(),
+            "task".to_string(),
+            None,
+            Some(vec![]),
+            None,
+            None,
+            "".to_string(),
+            None,
+            None,
+        )
+        .expect("create_bean should succeed");
+
+        let content = fs::read_to_string(&bean.file_path).expect("read bean file");
+        assert!(
+            !content.contains("priority:"),
+            "file should not contain a priority line when priority is None, got:\n{}",
+            content
+        );
+
+        assert!(
+            bean.priority.is_none(),
+            "returned Bean.priority should be None when not set"
+        );
     }
 }
