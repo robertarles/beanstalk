@@ -289,7 +289,7 @@ export function useKeyboardNav({
         clearPendingKey();
         jumpToLast();
       },
-      '?': (event: KeyboardEvent) => {
+      'Shift+?': (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
         event.preventDefault();
         setState((s) => ({ ...s, isModalOpen: !s.isModalOpen }));
