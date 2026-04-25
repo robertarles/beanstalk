@@ -15,6 +15,7 @@ interface CreateBeanFormProps {
 
 const BEAN_TYPES = ['task', 'epic', 'milestone'];
 const BEAN_STATUSES = ['todo', 'in-progress', 'completed', 'scrapped', 'draft'];
+const BEAN_PRIORITIES = ['', 'critical', 'high', 'normal', 'low', 'deferred'];
 
 export function CreateBeanForm({
   projectPath,
@@ -26,6 +27,7 @@ export function CreateBeanForm({
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState('todo');
   const [beanType, setBeanType] = useState('task');
+  const [priority, setPriority] = useState('');
   const [parentId, setParentId] = useState<string | null>(null);
   const [blocking, setBlocking] = useState<string[]>([]);
   const [blockedBy, setBlockedBy] = useState<string[]>([]);
@@ -87,6 +89,7 @@ export function CreateBeanForm({
           title: title.trim(),
           status,
           beanType,
+          priority: priority || undefined,
           parent: parentId ?? undefined,
           tags: tagsArray.length > 0 ? tagsArray : undefined,
           assignee: assignee.trim() || null,
@@ -101,7 +104,7 @@ export function CreateBeanForm({
         setIsSubmitting(false);
       }
     },
-    [projectPath, title, beanType, tags, assignee, body, onCreated]
+    [projectPath, title, status, beanType, priority, parentId, tags, assignee, body, blocking, blockedBy, onCreated]
   );
 
   const inputClass =
@@ -191,6 +194,22 @@ export function CreateBeanForm({
             {BEAN_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Priority */}
+        <div className="flex flex-col gap-1">
+          <label className={labelClass}>Priority</label>
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value)}
+            className={inputClass}
+          >
+            {BEAN_PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {p === '' ? '— none —' : p}
               </option>
             ))}
           </select>
