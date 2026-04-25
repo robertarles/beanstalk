@@ -29,7 +29,7 @@ export interface UseKeyboardNavOptions {
   onOpenInEditor?: () => void;
   /** Called when `e` is pressed — enter edit mode for selected bean. */
   onEnterEditMode?: () => void;
-  /** Called when `n` or `c` is pressed — open the new-bean form. */
+  /** Called when `n` or `a` is pressed — open the new-bean form. */
   onNewBean?: () => void;
   /** Called when `l` is pressed — toggle expand/collapse of selected bean. */
   onToggleExpand?: () => void;
@@ -318,7 +318,7 @@ export function useKeyboardNav({
         event.preventDefault();
         newBean();
       },
-      c: (event: KeyboardEvent) => {
+      a: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
         if (stateRef.current.isModalOpen) return;
         event.preventDefault();
