@@ -48,14 +48,14 @@ describe('BeanDetail', () => {
     render(<BeanDetail {...defaultProps} />)
     expect(screen.getByText('My Test Bean')).toBeInTheDocument()
     // Status appears in the select element
-    const statusSelect = screen.getByRole('combobox')
+    const statusSelect = screen.getByRole('combobox', { name: 'Status' })
     expect(statusSelect).toHaveValue('open')
   })
 
   it('status select calls onStatusChange', () => {
     const onStatusChange = vi.fn()
     render(<BeanDetail {...defaultProps} onStatusChange={onStatusChange} />)
-    const select = screen.getByRole('combobox')
+    const select = screen.getByRole('combobox', { name: 'Status' })
     fireEvent.change(select, { target: { value: 'completed' } })
     expect(onStatusChange).toHaveBeenCalledWith('completed')
   })
