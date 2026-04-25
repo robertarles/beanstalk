@@ -143,7 +143,7 @@ function App() {
   }, [refresh, showToast]);
 
   const handleKbToggleExpand = useCallback(() => {
-    const id = flatBeanIdsRef.current[selectedBeanIndexRef.current];
+    const id = selectedBeanIdRef.current;
     if (id) beanListToggleExpandRef.current?.(id);
   }, []);
 
