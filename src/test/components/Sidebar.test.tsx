@@ -59,9 +59,10 @@ describe('Sidebar', () => {
     expect(screen.getByText(/No projects yet/i)).toBeInTheDocument()
   })
 
-  it('shows status filter options', () => {
+  it('shows status filter options', async () => {
+    const user = userEvent.setup()
     render(<Sidebar {...defaultProps} />)
-
+    await user.click(screen.getByText('Status'))
     expect(screen.getByText('todo')).toBeInTheDocument()
     expect(screen.getByText('in-progress')).toBeInTheDocument()
     expect(screen.getByText('completed')).toBeInTheDocument()
@@ -79,8 +80,10 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Tags')).not.toBeInTheDocument()
   })
 
-  it('shows Tags section when tags exist', () => {
+  it('shows Tags section when tags exist', async () => {
+    const user = userEvent.setup()
     render(<Sidebar {...defaultProps} tags={['bug', 'frontend']} />)
+    await user.click(screen.getByText('Tags'))
     expect(screen.getByText(/^Tags$/i)).toBeInTheDocument()
     expect(screen.getByText('#bug')).toBeInTheDocument()
     expect(screen.getByText('#frontend')).toBeInTheDocument()
@@ -95,6 +98,7 @@ describe('Sidebar', () => {
     const onTagFilter = vi.fn()
     const user = userEvent.setup()
     render(<Sidebar {...defaultProps} tags={['bug', 'frontend']} tagFilter={[]} onTagFilter={onTagFilter} />)
+    await user.click(screen.getByText('Tags'))
     await user.click(screen.getByText('#bug'))
     expect(onTagFilter).toHaveBeenCalledWith(['bug'])
   })
