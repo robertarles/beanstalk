@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Bean } from '../types/beans';
+import { fuzzyFilterItems } from '../lib/fuzzy';
 
 interface ParentBeanSelectProps {
   beans: Bean[];
@@ -54,10 +55,7 @@ export function ParentBeanSelect({ beans, value, onChange, excludeId }: ParentBe
   const selected = value ? flat.find(b => b.id === value) ?? null : null;
 
   const filtered = search.trim()
-    ? flat.filter(b =>
-        b.title.toLowerCase().includes(search.toLowerCase()) ||
-        b.id.toLowerCase().includes(search.toLowerCase())
-      )
+    ? fuzzyFilterItems(flat, search, b => [b.title, b.id])
     : flat;
 
   const handleSelect = useCallback((bean: Bean | null) => {
