@@ -180,7 +180,7 @@ pub fn update_bean(
     tags: Option<Vec<String>>,
     assignee: Option<String>,
     body: Option<String>,
-    parent: Option<Option<String>>,
+    parent: Option<String>,
     priority: Option<String>,
     blocking: Option<Vec<String>>,
     blocked_by: Option<Vec<String>>,
@@ -200,9 +200,10 @@ pub fn update_bean(
         Some(p) => Some(p),
         None => existing.priority.clone(),
     };
-    // parent: Some(Some(id)) = set parent, Some(None) = clear parent, None = keep existing
+    // parent: Some("") = clear, Some(id) = set, None = keep existing
     let new_parent = match parent {
-        Some(p) => p,
+        Some(ref p) if p.is_empty() => None,
+        Some(p) => Some(p),
         None => existing.parent.clone(),
     };
     let new_blocking = blocking.unwrap_or(existing.blocking.clone());
@@ -872,6 +873,49 @@ mod tests {
         );
 
         assert!(result.is_err(), "update_bean should return Err for unknown id");
+    }
+
+    #[test]
+    fn test_update_bean_clears_parent_with_empty_string() {
+        // Regression for beanstalk-du57: removing a parent via UI edit must persist.
+        // Frontend sends "" to mean "clear"; backend must drop the parent field.
+        let tmp = TempDir::new("update_clear_parent");
+        let project_path = tmp.path().to_string_lossy().to_string();
+
+        let bean = create_bean(
+            project_path.clone(),
+            "Child Bean".to_string(),
+            "open".to_string(),
+            "task".to_string(),
+            Some("parent-abc".to_string()),
+            Some(vec![]),
+            None,
+            None,
+            Some("".to_string()),
+            None,
+            None,
+        )
+        .expect("create_bean should succeed");
+        assert_eq!(bean.parent.as_deref(), Some("parent-abc"));
+
+        let updated = update_bean(
+            project_path.clone(),
+            bean.id.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("".to_string()),
+            None,
+            None,
+            None,
+        )
+        .expect("update_bean should succeed");
+
+        assert!(updated.parent.is_none(), "empty-string parent should clear it");
+        let on_disk = fs::read_to_string(&updated.file_path).expect("read file");
+        assert!(!on_disk.contains("parent:"), "parent line should be absent from file");
     }
 
     // ── yaml_quote_str tests (beanstalk-e5ce fix) ────────────────────────────

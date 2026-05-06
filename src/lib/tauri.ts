@@ -37,9 +37,10 @@ export const updateBean = (params: {
   blockedBy?: string[];
 }) => {
   // Rust's serde maps JSON null → None (keep existing) for Option<String>.
-  // Send "" instead of null so the backend receives Some("") and clears priority.
+  // Send "" instead of null so the backend receives Some("") and clears the field.
   const payload = { ...params };
   if (payload.priority === null) payload.priority = '';
+  if (payload.parent === null) payload.parent = '';
   return invoke<Bean>('update_bean', payload);
 };
 

@@ -154,7 +154,7 @@ export const BeanDetail = memo(function BeanDetail({
         tags: tagsArray,
         assignee: editAssignee || null,
         priority: editPriority || null,
-        parent: editParentId ?? undefined,
+        parent: editParentId,
         blocking: editBlocking,
         blocked_by: editBlockedBy,
       });
