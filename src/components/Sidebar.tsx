@@ -2,7 +2,7 @@ import { useState, memo } from 'react';
 import type { Project } from '../types/beans';
 import { AddProjectDialog } from './AddProjectDialog';
 
-const BEAN_STATUSES = ['todo', 'in-progress', 'completed', 'scrapped', 'draft'];
+const BEAN_STATUSES = ['todo', 'in-progress', 'completed', 'scrapped', 'draft', 'archived'];
 const BEAN_PRIORITIES = ['critical', 'high', 'normal', 'low', 'deferred'];
 
 interface SidebarProps {
