@@ -89,13 +89,14 @@ pub fn create_bean(
     tags: Option<Vec<String>>,
     assignee: Option<String>,
     priority: Option<String>,
-    body: String,
+    body: Option<String>,
     blocking: Option<Vec<String>>,
     blocked_by: Option<Vec<String>>,
 ) -> Result<Bean, String> {
     let tags = tags.unwrap_or_default();
     let blocking = blocking.unwrap_or_default();
     let blocked_by = blocked_by.unwrap_or_default();
+    let body = body.unwrap_or_default();
 
     // Read the project's .beans.yml to get the configured prefix.
     let beans_cfg = parse_beans_config(Path::new(&project_path));
@@ -528,7 +529,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "some body".to_string(),
+            Some("some body".to_string()),
             None,
             None,
         );
@@ -560,7 +561,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         );
@@ -669,7 +670,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         );
@@ -702,7 +703,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
@@ -734,7 +735,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
@@ -752,7 +753,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
@@ -788,7 +789,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
@@ -822,7 +823,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
@@ -962,7 +963,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
@@ -993,7 +994,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
@@ -1037,7 +1038,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
@@ -1076,7 +1077,7 @@ mod tests {
             Some(vec![]),
             None,
             Some("high".to_string()),
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
@@ -1121,7 +1122,7 @@ mod tests {
             Some(vec![]),
             None,
             None,
-            "".to_string(),
+            Some("".to_string()),
             None,
             None,
         )
