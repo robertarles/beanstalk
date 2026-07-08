@@ -1,0 +1,6 @@
+# cargo-nextest configuration.
+# The `ci` profile emits a JUnit XML report so `make test` can satisfy the
+# CONTRIBUTING.md requirement of JUnit-format test results. The path is relative
+# to the store dir (target/nextest/ci/); the Makefile copies it into reports/testing/.
+[profile.ci.junit]
+path = "junit.xml"
