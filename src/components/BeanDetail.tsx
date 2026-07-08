@@ -35,6 +35,8 @@ function statusBadgeClass(status: string): string {
     case 'completed':
     case 'done':
       return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
+    case 'draft':
+      return 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
     case 'archived':
     case 'scrapped':
       return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';

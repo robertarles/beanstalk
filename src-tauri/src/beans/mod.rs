@@ -307,9 +307,15 @@ pub fn scan_beans_directory(project_path: &Path) -> Result<Vec<Bean>> {
 
     let mut beans = Vec::new();
 
+    // Beans in `.beans/archive` are no longer active (todo, in-progress, draft)
+    // so they are not relevant here. Prune the archive directory entirely rather
+    // than parsing every file inside it (beanstalk-z25z).
+    let archive_dir = beans_dir.join("archive");
+
     for entry in WalkDir::new(&beans_dir)
         .follow_links(false)
         .into_iter()
+        .filter_entry(|e| e.path() != archive_dir)
         .filter_map(|e| {
             e.map_err(|err| {
                 eprintln!("scan_beans_directory: walkdir error: {err}");
@@ -640,6 +646,32 @@ mod tests {
         let beans = scan_beans_directory(&dir).unwrap();
         assert_eq!(beans.len(), 1);
         assert_eq!(beans[0].id, "bean1");
+    }
+
+    #[test]
+    fn test_scan_beans_directory_skips_archive() {
+        let dir = temp_dir("scan_archive");
+        let beans_dir = dir.join(".beans");
+        let archive_dir = beans_dir.join("archive");
+        fs::create_dir_all(&archive_dir).unwrap();
+
+        // Active bean at the top level
+        fs::write(
+            beans_dir.join("active--slug.md"),
+            "---\nid: active\ntitle: Active Bean\nstatus: todo\n---\nBody\n",
+        )
+        .unwrap();
+
+        // Archived bean nested under .beans/archive — must be ignored
+        fs::write(
+            archive_dir.join("archived--slug.md"),
+            "---\nid: archived\ntitle: Archived Bean\nstatus: completed\n---\nBody\n",
+        )
+        .unwrap();
+
+        let beans = scan_beans_directory(&dir).unwrap();
+        assert_eq!(beans.len(), 1);
+        assert_eq!(beans[0].id, "active");
     }
 
     // ── beanstalk-kn8f: build_tree ───────────────────────────────────────────

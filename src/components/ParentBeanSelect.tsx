@@ -46,8 +46,10 @@ function collectDescendantIds(beans: Bean[], rootId: string): Set<string> {
 export function ParentBeanSelect({ beans, value, onChange, excludeId }: ParentBeanSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
 
   const excluded = excludeId ? collectDescendantIds(beans, excludeId) : new Set<string>();
   const flat = flattenBeans(beans).filter(b => !excluded.has(b.id));
@@ -58,11 +60,42 @@ export function ParentBeanSelect({ beans, value, onChange, excludeId }: ParentBe
     ? fuzzyFilterItems(flat, search, b => [b.title, b.id])
     : flat;
 
+  // Navigable option list. When not searching, the "None" option (null) leads
+  // the list so it is reachable via the keyboard too.
+  const options: (Bean | null)[] = search.trim() ? filtered : [null, ...filtered];
+
   const handleSelect = useCallback((bean: Bean | null) => {
     onChange(bean ? bean.id : null);
     setSearch('');
     setOpen(false);
   }, [onChange]);
+
+  // Reset the highlighted option whenever the dropdown opens or the query changes.
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [open, search]);
+
+  // Keep the highlighted option scrolled into view as the user arrows through.
+  useEffect(() => {
+    if (open) itemRefs.current[activeIndex]?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeIndex, open]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(i => Math.min(i + 1, options.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (options.length > 0) handleSelect(options[Math.min(activeIndex, options.length - 1)]);
+    }
+  }, [options, activeIndex, handleSelect]);
 
   // Close on outside click
   useEffect(() => {
@@ -122,38 +155,44 @@ export function ParentBeanSelect({ beans, value, onChange, excludeId }: ParentBe
               onChange={e => setSearch(e.target.value)}
               placeholder="Search beans..."
               className="w-full text-sm px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              onKeyDown={e => e.key === 'Escape' && setOpen(false)}
+              onKeyDown={handleKeyDown}
             />
           </div>
           <ul className="overflow-y-auto flex-1">
-            {!search && (
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleSelect(null)}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
-                >
-                  None
-                </button>
-              </li>
-            )}
-            {filtered.length === 0 && (
+            {options.length === 0 && (
               <li className="px-3 py-2 text-sm text-gray-400 dark:text-gray-500">No results</li>
             )}
-            {filtered.map(bean => (
-              <li key={bean.file_path || bean.id}>
-                <button
-                  type="button"
-                  onClick={() => handleSelect(bean)}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 ${
-                    bean.id === value ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'
-                  }`}
-                >
-                  <span className="truncate flex-1">{bean.title}</span>
-                  <span className="text-xs text-gray-400 dark:text-gray-600 font-mono shrink-0">{bean.id}</span>
-                </button>
-              </li>
-            ))}
+            {options.map((bean, index) => {
+              const isActive = index === activeIndex;
+              const isNone = bean === null;
+              return (
+                <li key={isNone ? '__none__' : bean.file_path || bean.id} ref={el => { itemRefs.current[index] = el; }}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(bean)}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    className={
+                      isNone
+                        ? `w-full text-left px-3 py-2 text-sm text-gray-400 dark:text-gray-500 ${isActive ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`
+                        : `w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${
+                            isActive ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                          } ${
+                            bean.id === value ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'
+                          }`
+                    }
+                  >
+                    {isNone ? (
+                      'None'
+                    ) : (
+                      <>
+                        <span className="truncate flex-1">{bean.title}</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-600 font-mono shrink-0">{bean.id}</span>
+                      </>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
