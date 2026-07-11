@@ -317,34 +317,90 @@ pub fn search_beans(
 
 // ── Open in editor command (beanstalk-znwt) ──────────────────────────────────
 
+/// The default GUI editors to try, in order, when no editor is configured in
+/// settings. TextEdit ships with macOS and is always present, so it is the
+/// guaranteed final fallback.
+const DEFAULT_EDITOR_APPS: [&str; 3] = ["Neovide", "Visual Studio Code", "TextEdit"];
+
+/// What to launch when opening a bean file.
+#[derive(Debug, PartialEq)]
+enum EditorChoice {
+    /// A user-configured editor command (may include arguments), spawned directly.
+    Command(String),
+    /// No editor configured: try these macOS apps in order via `open -a`.
+    AppChain(Vec<String>),
+}
+
+/// Decide how to open a bean file. A non-blank editor configured in the app
+/// settings always wins (the escape hatch); otherwise fall back to the default
+/// GUI app chain (Neovide → VS Code → TextEdit).
+///
+/// Note: unlike the previous behavior, the shell's $EDITOR/$VISUAL are
+/// intentionally *not* consulted — those commonly point at terminal editors
+/// (e.g. nvim) which cannot be spawned from a GUI process and fail silently.
+fn resolve_editor_choice(configured: Option<String>) -> EditorChoice {
+    match configured
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
+        Some(cmd) => EditorChoice::Command(cmd),
+        None => EditorChoice::AppChain(
+            DEFAULT_EDITOR_APPS.iter().map(|s| s.to_string()).collect(),
+        ),
+    }
+}
+
+/// Launch a configured editor command (e.g. "code --wait" or "neovide") on
+/// `file_path`. Supports commands that carry arguments.
+fn launch_editor_command(command: &str, file_path: &str) -> Result<(), String> {
+    let mut parts = command.split_whitespace();
+    let program = parts
+        .next()
+        .ok_or_else(|| "Configured editor is empty".to_string())?;
+    std::process::Command::new(program)
+        .args(parts)
+        .arg(file_path)
+        .spawn()
+        .map_err(|e| format!("Failed to launch editor '{}': {e}", command))?;
+    Ok(())
+}
+
+/// Open `file_path` in a macOS application by name via `open -a`. Returns an
+/// error (without launching anything) when the app is not installed, so the
+/// caller can try the next candidate in the chain.
+fn open_with_app(app: &str, file_path: &str) -> Result<(), String> {
+    let status = std::process::Command::new("open")
+        .arg("-a")
+        .arg(app)
+        .arg(file_path)
+        .status()
+        .map_err(|e| format!("Failed to run `open`: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("Application '{}' is not available", app))
+    }
+}
+
 #[tauri::command]
 pub fn open_bean_in_editor(project_path: String, bean_id: String) -> Result<(), String> {
     let bean = get_bean(project_path, bean_id)?;
     let file_path = &bean.file_path;
 
-    // Determine the editor: EDITOR > VISUAL > `open` (macOS default).
-    let editor = std::env::var("EDITOR")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("VISUAL").ok().filter(|s| !s.is_empty()));
-
-    match editor {
-        Some(ed) => {
-            std::process::Command::new(&ed)
-                .arg(file_path)
-                .spawn()
-                .map_err(|e| format!("Failed to launch editor '{}': {e}", ed))?;
-        }
-        None => {
-            // Fall back to macOS `open`, which uses the default app for .md files.
-            std::process::Command::new("open")
-                .arg(file_path)
-                .spawn()
-                .map_err(|e| format!("Failed to open file with default app: {e}"))?;
+    match resolve_editor_choice(crate::config::load_config().editor) {
+        EditorChoice::Command(cmd) => launch_editor_command(&cmd, file_path),
+        EditorChoice::AppChain(apps) => {
+            // Try each app in order; stop at the first one that launches.
+            let mut last_err = String::from("No editor available");
+            for app in &apps {
+                match open_with_app(app, file_path) {
+                    Ok(()) => return Ok(()),
+                    Err(e) => last_err = e,
+                }
+            }
+            Err(last_err)
         }
     }
-
-    Ok(())
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -637,6 +693,40 @@ mod tests {
             "descriptive error expected, got: {}",
             err
         );
+    }
+
+    // ── beanstalk-gnhq: editor choice resolution ─────────────────────────────
+
+    #[test]
+    fn test_resolve_editor_choice_configured_wins() {
+        // A configured editor is the escape hatch and always wins, even though
+        // $EDITOR is set in the ambient environment.
+        std::env::set_var("EDITOR", "nvim");
+        assert_eq!(
+            resolve_editor_choice(Some("code --wait".to_string())),
+            EditorChoice::Command("code --wait".to_string())
+        );
+        std::env::remove_var("EDITOR");
+    }
+
+    #[test]
+    fn test_resolve_editor_choice_trims_configured() {
+        assert_eq!(
+            resolve_editor_choice(Some("  neovide  ".to_string())),
+            EditorChoice::Command("neovide".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resolve_editor_choice_default_chain_when_unconfigured() {
+        // Blank and None both fall back to the default app chain, in order.
+        let expected = EditorChoice::AppChain(vec![
+            "Neovide".to_string(),
+            "Visual Studio Code".to_string(),
+            "TextEdit".to_string(),
+        ]);
+        assert_eq!(resolve_editor_choice(None), expected);
+        assert_eq!(resolve_editor_choice(Some("   ".to_string())), expected);
     }
 
     // ── beanstalk-k16a: search_beans tests ───────────────────────────────────

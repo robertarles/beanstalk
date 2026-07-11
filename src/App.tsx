@@ -110,8 +110,9 @@ function App() {
       await openBeanInEditor(project, beanId);
     } catch (e) {
       console.error('Failed to open bean in editor:', e);
+      showToast(e instanceof Error ? e.message : 'Failed to open bean in editor', 'error');
     }
-  }, []);
+  }, [showToast]);
 
   const handleKbEnterEditMode = useCallback(() => {
     beanDetailEditStartRef.current?.();
@@ -436,6 +437,7 @@ function App() {
               onPriorityChange={handlePriorityChange}
               onSave={handleSave}
               onTouch={handleTouch}
+              onError={(msg) => showToast(msg, 'error')}
               availableStatuses={availableStatuses}
               allBeans={beans}
               projectPath={activeProject ?? undefined}

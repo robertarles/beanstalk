@@ -60,6 +60,39 @@ describe('BeanDetail', () => {
     expect(onStatusChange).toHaveBeenCalledWith('completed')
   })
 
+  // ── beanstalk-3mto: terminal statuses always offered in status select ─────
+  it('status select always offers canonical statuses even when absent from availableStatuses', () => {
+    // Simulate archived beans being excluded: only 'todo' is present in the tree.
+    render(
+      <BeanDetail
+        {...defaultProps}
+        bean={{ ...mockBean, status: 'todo' }}
+        availableStatuses={['todo']}
+      />
+    )
+    const select = screen.getByRole('combobox', { name: 'Status' })
+    const options = Array.from(select.querySelectorAll('option')).map((o) => o.value)
+    expect(options).toEqual(
+      expect.arrayContaining(['todo', 'in-progress', 'completed', 'scrapped', 'draft'])
+    )
+  })
+
+  it('status select preserves custom project statuses alongside canonical ones', () => {
+    render(
+      <BeanDetail
+        {...defaultProps}
+        bean={{ ...mockBean, status: 'open' }}
+        availableStatuses={['open', 'todo']}
+      />
+    )
+    const select = screen.getByRole('combobox', { name: 'Status' })
+    const options = Array.from(select.querySelectorAll('option')).map((o) => o.value)
+    // Canonical + the custom 'open' status (also the current bean status)
+    expect(options).toEqual(
+      expect.arrayContaining(['todo', 'in-progress', 'completed', 'scrapped', 'draft', 'open'])
+    )
+  })
+
   it('edit button switches to edit mode', () => {
     render(<BeanDetail {...defaultProps} />)
     const editButton = screen.getByRole('button', { name: /^Edit$/i })

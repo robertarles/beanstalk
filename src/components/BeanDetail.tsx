@@ -16,6 +16,8 @@ interface BeanDetailProps {
   allBeans?: Bean[];
   onSave?: (fields: Partial<Bean>) => void | Promise<void>;
   onTouch?: () => void | Promise<void>;
+  /** Surface a user-visible error (e.g. failing to launch the external editor). */
+  onError?: (message: string) => void;
   projectPath?: string;
   /** Register an Escape handler with the keyboard nav system. Priority 20 — cancels edit mode. */
   registerEscapeHandler?: (priority: number, handler: () => boolean) => () => void;
@@ -73,6 +75,7 @@ export const BeanDetail = memo(function BeanDetail({
   allBeans = [],
   onSave = () => {},
   onTouch,
+  onError,
   projectPath = '',
   registerEscapeHandler,
   onEditStartRef,
@@ -175,10 +178,11 @@ export const BeanDetail = memo(function BeanDetail({
       onOpenInEditor();
     } catch (e) {
       console.error('Failed to open bean in editor:', e);
+      onError?.(e instanceof Error ? e.message : 'Failed to open bean in editor');
     } finally {
       setTimeout(() => setIsOpeningEditor(false), 1000);
     }
-  }, [bean, projectPath, onOpenInEditor]);
+  }, [bean, projectPath, onOpenInEditor, onError]);
 
   const handleTouch = useCallback(async () => {
     if (!bean || !onTouch) return;
@@ -429,9 +433,15 @@ export const BeanDetail = memo(function BeanDetail({
     );
   }
 
-  const statusesForSelect = [...availableStatuses];
-  if (!statusesForSelect.includes(bean.status)) {
-    statusesForSelect.push(bean.status);
+  // Always offer the canonical statuses (so terminal statuses like
+  // 'completed'/'scrapped' remain selectable even when no loaded bean currently
+  // has them — archived beans are excluded from `availableStatuses`), then union
+  // in any custom project statuses and the current bean's status.
+  const statusesForSelect = [...BEAN_STATUSES];
+  for (const s of [...availableStatuses, bean.status]) {
+    if (!statusesForSelect.includes(s)) {
+      statusesForSelect.push(s);
+    }
   }
 
   return (
