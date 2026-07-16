@@ -16,7 +16,7 @@ help: ## Show this help
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-all: build ## Build everything (default build pipeline)
+all: build test coverage report-index ## Build everything (default build pipeline)
 
 clean: ## Remove build artifacts and generated reports
 	rm -rf dist $(REPORTS)
@@ -61,4 +61,4 @@ report-index: ## Generate reports/index.html linking the HTML reports
 install: clean ## Build and install the app to /Applications (macOS)
 	cd src-tauri && cargo tauri build
 	rm -rf /Applications/Beanstalk.app
-	cp -r src-tauri/target/release/bundle/macos/Beanstalk.app /Applications/Beanstalk.app
+	cp -r src-tauri/target/release/bundle/macos/Beanstalk.app ~/Applications/Beanstalk.app

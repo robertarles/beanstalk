@@ -1,6 +1,6 @@
 // Tauri commands for bean CRUD operations (beanstalk-v5m3)
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::beans::{parse_bean_file, parse_beans_config, scan_beans_directory, build_tree, Bean};
 
@@ -350,19 +350,99 @@ fn resolve_editor_choice(configured: Option<String>) -> EditorChoice {
     }
 }
 
-/// Launch a configured editor command (e.g. "code --wait" or "neovide") on
-/// `file_path`. Supports commands that carry arguments.
+/// Directories where CLI editors are commonly installed (e.g. Homebrew) but
+/// which are missing from a macOS GUI app's inherited PATH. A `.app` bundle
+/// launched from Finder does not see the login shell's PATH, so a configured
+/// editor like `neovide` (installed at /opt/homebrew/bin) would otherwise fail
+/// to spawn.
+const EXTRA_PATH_DIRS: [&str; 3] = ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin"];
+
+/// The inherited `PATH` with `EXTRA_PATH_DIRS` appended (skipping any already
+/// present). Used both to resolve the configured editor binary and as the child
+/// process's PATH so the editor's own subprocesses have a sane environment.
+fn augmented_path() -> String {
+    let inherited = std::env::var("PATH").unwrap_or_default();
+    let mut dirs: Vec<String> = if inherited.is_empty() {
+        Vec::new()
+    } else {
+        inherited.split(':').map(|s| s.to_string()).collect()
+    };
+    for extra in EXTRA_PATH_DIRS {
+        if !dirs.iter().any(|d| d == extra) {
+            dirs.push(extra.to_string());
+        }
+    }
+    dirs.join(":")
+}
+
+/// Resolve `program` to an executable path. A program containing a path
+/// separator is used as-is when it exists; a bare name is searched for across
+/// the augmented PATH. Returns `None` when no matching file is found.
+fn resolve_program_path(program: &str) -> Option<PathBuf> {
+    if program.contains('/') {
+        let p = PathBuf::from(program);
+        return if p.exists() { Some(p) } else { None };
+    }
+    for dir in augmented_path().split(':') {
+        if dir.is_empty() {
+            continue;
+        }
+        let candidate = Path::new(dir).join(program);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// How to launch a configured editor's program.
+#[derive(Debug, PartialEq)]
+enum EditorTarget {
+    /// A macOS `.app` bundle path — launch via `open -a`.
+    AppBundle(String),
+    /// A resolved executable — spawn directly (arguments preserved).
+    Binary(PathBuf),
+    /// A bare name that is not an executable — treat as a macOS app name and
+    /// launch via `open -a` (e.g. `neovide` -> Neovide.app).
+    AppName(String),
+}
+
+/// Classify a configured editor's program token into how it should be launched.
+fn classify_editor_program(program: &str) -> EditorTarget {
+    if program.ends_with(".app") {
+        EditorTarget::AppBundle(program.to_string())
+    } else if let Some(path) = resolve_program_path(program) {
+        EditorTarget::Binary(path)
+    } else {
+        EditorTarget::AppName(program.to_string())
+    }
+}
+
+/// Launch a configured editor command (e.g. "code --wait", "neovide", or
+/// "/Applications/Neovide.app") on `file_path`. Real binaries are spawned
+/// directly with their arguments; `.app` bundles and bare app names are opened
+/// via `open -a`.
 fn launch_editor_command(command: &str, file_path: &str) -> Result<(), String> {
     let mut parts = command.split_whitespace();
     let program = parts
         .next()
         .ok_or_else(|| "Configured editor is empty".to_string())?;
-    std::process::Command::new(program)
-        .args(parts)
-        .arg(file_path)
-        .spawn()
-        .map_err(|e| format!("Failed to launch editor '{}': {e}", command))?;
-    Ok(())
+    let rest: Vec<&str> = parts.collect();
+
+    match classify_editor_program(program) {
+        EditorTarget::AppBundle(app) | EditorTarget::AppName(app) => {
+            open_with_app(&app, file_path)
+        }
+        EditorTarget::Binary(bin) => {
+            std::process::Command::new(bin)
+                .args(rest)
+                .arg(file_path)
+                .env("PATH", augmented_path())
+                .spawn()
+                .map_err(|e| format!("Failed to launch editor '{}': {e}", command))?;
+            Ok(())
+        }
+    }
 }
 
 /// Open `file_path` in a macOS application by name via `open -a`. Returns an
@@ -727,6 +807,51 @@ mod tests {
         ]);
         assert_eq!(resolve_editor_choice(None), expected);
         assert_eq!(resolve_editor_choice(Some("   ".to_string())), expected);
+    }
+
+    #[test]
+    fn test_augmented_path_includes_homebrew() {
+        // The augmented PATH always contains the Homebrew bin dir so a GUI app
+        // (whose inherited PATH omits it) can still find CLI editors.
+        assert!(augmented_path()
+            .split(':')
+            .any(|d| d == "/opt/homebrew/bin"));
+    }
+
+    #[test]
+    fn test_resolve_program_path_absolute() {
+        // A program given by path resolves to that path when it exists...
+        assert_eq!(resolve_program_path("/bin/ls"), Some(PathBuf::from("/bin/ls")));
+        // ...and to None when it does not.
+        assert_eq!(resolve_program_path("/bin/no-such-binary-xyz"), None);
+    }
+
+    #[test]
+    fn test_resolve_program_path_bare_name() {
+        // A bare name is found on the augmented PATH...
+        assert!(resolve_program_path("ls").is_some());
+        // ...and an unknown name resolves to nothing.
+        assert_eq!(resolve_program_path("definitely-not-a-real-binary-xyz"), None);
+    }
+
+    #[test]
+    fn test_classify_editor_program() {
+        // A .app path is an app bundle regardless of whether it exists on disk.
+        assert_eq!(
+            classify_editor_program("/Applications/Neovide.app"),
+            EditorTarget::AppBundle("/Applications/Neovide.app".to_string())
+        );
+        // A resolvable binary classifies as Binary.
+        match classify_editor_program("ls") {
+            EditorTarget::Binary(_) => {}
+            other => panic!("expected Binary, got {other:?}"),
+        }
+        // A bare name that is not an executable falls back to an app name, so
+        // `open -a <name>` can find the matching macOS application.
+        assert_eq!(
+            classify_editor_program("no-such-binary-xyz"),
+            EditorTarget::AppName("no-such-binary-xyz".to_string())
+        );
     }
 
     // ── beanstalk-k16a: search_beans tests ───────────────────────────────────
