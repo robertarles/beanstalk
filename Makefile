@@ -58,7 +58,10 @@ report-index: ## Generate reports/index.html linking the HTML reports
 		> $(REPORTS)/index.html
 	@echo "Wrote $(REPORTS)/index.html"
 
-install: clean ## Build and install the app to /Applications (macOS)
+install: clean ## Build and install the app to ~/Applications (macOS)
 	cd src-tauri && cargo tauri build
-	rm -rf /Applications/Beanstalk.app
-	cp -r src-tauri/target/release/bundle/macos/Beanstalk.app ~/Applications/Beanstalk.app
+	rm -rf "$(HOME)/Applications/Beanstalk.app"
+	# Copy INTO ~/Applications, not onto the .app path: `cp -R src.app dest.app`
+	# nests a copy inside an existing bundle instead of replacing it, which
+	# silently leaves the old build in place.
+	cp -R src-tauri/target/release/bundle/macos/Beanstalk.app "$(HOME)/Applications/"
