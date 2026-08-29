@@ -33,6 +33,11 @@ interface BeanListProps {
    * can trigger expand/collapse via keyboard without prop-drilling state.
    */
   toggleExpandRef?: { current: ((id: string) => void) | undefined };
+  /**
+   * Right-click on a row. Receives the bean id and the viewport coordinates
+   * where the action menu should open.
+   */
+  onContextMenu?: (id: string, at: { x: number; y: number }) => void;
 }
 
 type SortColumn = 'title' | 'status' | 'date' | 'priority';
@@ -214,7 +219,7 @@ function SortArrow({ column, sort }: { column: SortColumn; sort: SortState }) {
 }
 
 // --- Main component ---
-export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], priorityFilter = [], tagFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler, toggleExpandRef }: BeanListProps) {
+export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, loading, statusFilter = [], priorityFilter = [], tagFilter = [], onNewBean, lastRefreshed, keyboardSelectedIndex, onFlatListChange, registerEscapeHandler, toggleExpandRef, onContextMenu }: BeanListProps) {
   const [sort, setSort] = useState<SortState>({ column: 'date', direction: 'desc' });
   const [expanded, setExpanded] = useState<Map<string, boolean>>(new Map());
   const [search, setSearch] = useState('');
@@ -536,7 +541,19 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
             return (
               <li key={bean.file_path || `${bean.id}-${depth}`}>
                 <button
+                  data-bean-row={bean.id}
                   onClick={() => onSelect(bean.id)}
+                  onContextMenu={
+                    onContextMenu
+                      ? (e) => {
+                          // Select the row first so the menu and the rest of
+                          // the UI agree on which bean is being acted on.
+                          e.preventDefault();
+                          onSelect(bean.id);
+                          onContextMenu(bean.id, { x: e.clientX, y: e.clientY });
+                        }
+                      : undefined
+                  }
                   className={[
                     'w-full text-left flex flex-col pr-3 py-1.5 transition-colors',
                     isSelected

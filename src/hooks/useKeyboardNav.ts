@@ -25,9 +25,9 @@ export interface UseKeyboardNavOptions {
   beanCount: number;
   /** Called when j/k navigation changes the selected index. */
   onSelectIndex: (index: number) => void;
-  /** Called when `i` is pressed — open selected bean in external editor. */
+  /** Called when `e` is pressed — open selected bean in external editor. */
   onOpenInEditor?: () => void;
-  /** Called when `e` is pressed — enter edit mode for selected bean. */
+  /** Called when `i` is pressed — enter inline edit mode for selected bean. */
   onEnterEditMode?: () => void;
   /** Called when `n` or `a` is pressed — open the new-bean form. */
   onNewBean?: () => void;
@@ -37,6 +37,8 @@ export interface UseKeyboardNavOptions {
   onCycleStatus?: () => void;
   /** Called when `y` is pressed — copy selected bean ID to clipboard. */
   onCopyId?: () => void;
+  /** Called when `Space` is pressed — open the bean action menu. */
+  onOpenActionMenu?: () => void;
 }
 
 export interface UseKeyboardNavResult {
@@ -67,6 +69,7 @@ export function useKeyboardNav({
   onCycleStatus,
   onCopyId,
   onToggleExpand,
+  onOpenActionMenu,
 }: UseKeyboardNavOptions): UseKeyboardNavResult {
   const [state, setState] = useState<KeyboardNavState>({
     focusedPanel: 'list',
@@ -103,6 +106,9 @@ export function useKeyboardNav({
 
   const onToggleExpandRef = useRef(onToggleExpand);
   onToggleExpandRef.current = onToggleExpand;
+
+  const onOpenActionMenuRef = useRef(onOpenActionMenu);
+  onOpenActionMenuRef.current = onOpenActionMenu;
 
   // Escape handler registry
   const escapeHandlersRef = useRef<EscapeHandler[]>([]);
@@ -180,6 +186,10 @@ export function useKeyboardNav({
 
   const toggleExpand = useCallback(() => {
     onToggleExpandRef.current?.();
+  }, []);
+
+  const openActionMenu = useCallback(() => {
+    onOpenActionMenuRef.current?.();
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -300,13 +310,23 @@ export function useKeyboardNav({
         event.preventDefault();
         focusSearch();
       },
-      i: (event: KeyboardEvent) => {
+      // Space opens the contextual action menu — the leader-key convention
+      // from which-key/LSP code actions. `e` stays a direct jump to the
+      // external editor, which the menu also offers as its first entry.
+      Space: (event: KeyboardEvent) => {
+        if (isInputTarget(event)) return;
+        if (stateRef.current.isModalOpen) return;
+        event.preventDefault();
+        openActionMenu();
+      },
+      // `e` for editor, `i` for vim's insert — editing in place.
+      e: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
         if (stateRef.current.isModalOpen) return;
         event.preventDefault();
         openInEditor();
       },
-      e: (event: KeyboardEvent) => {
+      i: (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
         if (stateRef.current.isModalOpen) return;
         event.preventDefault();
@@ -366,7 +386,7 @@ export function useKeyboardNav({
         clearTimeout(pendingKeyTimerRef.current);
       }
     };
-  }, [selectNext, selectPrevious, focusLeft, focusRight, jumpToFirst, jumpToLast, handleEscape, focusSearch, openInEditor, enterEditMode, newBean, cycleStatus, copyId, toggleExpand]);
+  }, [selectNext, selectPrevious, focusLeft, focusRight, jumpToFirst, jumpToLast, handleEscape, focusSearch, openInEditor, enterEditMode, newBean, cycleStatus, copyId, toggleExpand, openActionMenu]);
 
   // ---------------------------------------------------------------------------
   // Stable setters

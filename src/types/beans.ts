@@ -31,4 +31,32 @@ export interface AppConfig {
   last_active_project: string | null;
   editor: string | null;
   recent_projects: string[];
+  scripts_dir: string | null;
+}
+
+/** Where a bean script was discovered. Project scripts shadow global ones. */
+export type ScriptScope = 'global' | 'project';
+
+/** A discovered, runnable bean action script. */
+export interface BeanScript {
+  /** Filename (e.g. `jira.sh`) — the shadowing key and the run identifier. */
+  id: string;
+  name: string;
+  description: string | null;
+  /** Optional single-character accelerator declared by the script. */
+  key: string | null;
+  path: string;
+  scope: ScriptScope;
+  timeout_secs: number;
+}
+
+/** The result of running a bean script. */
+export interface ScriptOutput {
+  script_id: string;
+  name: string;
+  success: boolean;
+  exit_code: number | null;
+  stdout: string;
+  stderr: string;
+  timed_out: boolean;
 }

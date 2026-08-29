@@ -360,7 +360,7 @@ const EXTRA_PATH_DIRS: [&str; 3] = ["/opt/homebrew/bin", "/opt/homebrew/sbin", "
 /// The inherited `PATH` with `EXTRA_PATH_DIRS` appended (skipping any already
 /// present). Used both to resolve the configured editor binary and as the child
 /// process's PATH so the editor's own subprocesses have a sane environment.
-fn augmented_path() -> String {
+pub(crate) fn augmented_path() -> String {
     let inherited = std::env::var("PATH").unwrap_or_default();
     let mut dirs: Vec<String> = if inherited.is_empty() {
         Vec::new()

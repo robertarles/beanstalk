@@ -35,11 +35,22 @@ const SECTIONS: Section[] = [
     title: 'Bean Actions',
     bindings: [
       { keys: 'Enter', description: 'Open bean in detail panel' },
-      { keys: 'i', description: 'Open selected bean in editor' },
-      { keys: 'e', description: 'Enter inline edit mode' },
+      { keys: 'Space', description: 'Open action menu (edit + scripts)' },
+      { keys: 'e', description: 'Open selected bean in external editor' },
+      { keys: 'i', description: 'Enter inline edit mode' },
       { keys: 'n / a', description: 'Open new bean form' },
       { keys: 's', description: 'Cycle status forward' },
       { keys: 'y', description: 'Copy bean ID to clipboard' },
+    ],
+  },
+  {
+    title: 'Action Menu',
+    bindings: [
+      { keys: 'Space', description: 'Open menu for the selected bean' },
+      { keys: 'Right-click', description: 'Open menu for a row' },
+      { keys: 'j / k', description: 'Move down / up in the menu' },
+      { keys: 'Enter', description: 'Run the highlighted action' },
+      { keys: 'Escape', description: 'Close the menu' },
     ],
   },
   {

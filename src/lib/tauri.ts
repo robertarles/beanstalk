@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl as tauriOpenUrl } from '@tauri-apps/plugin-opener';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
-import type { Bean, AppConfig } from '../types/beans';
+import type { Bean, AppConfig, BeanScript, ScriptOutput } from '../types/beans';
 
 export const getBeans = (projectPath: string) =>
   invoke<Bean[]>('get_beans', { projectPath });
@@ -71,6 +71,17 @@ export const addProject = (path: string) => invoke<AppConfig>('add_project', { p
 export const removeProject = (path: string) => invoke<AppConfig>('remove_project', { path });
 
 export const setActiveProject = (path: string) => invoke<AppConfig>('set_active_project', { path });
+
+export const updateConfig = (config: AppConfig) => invoke<AppConfig>('update_config', { config });
+
+export const listBeanScripts = (projectPath: string) =>
+  invoke<BeanScript[]>('list_bean_scripts', { projectPath });
+
+export const runBeanScript = (projectPath: string, beanId: string, scriptId: string) =>
+  invoke<ScriptOutput>('run_bean_script', { projectPath, beanId, scriptId });
+
+export const getScriptsDirs = (projectPath: string) =>
+  invoke<string[]>('get_scripts_dirs', { projectPath });
 
 export const startWatching = (projectPath: string) => invoke<void>('start_watching', { projectPath });
 

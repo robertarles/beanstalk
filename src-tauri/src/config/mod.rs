@@ -19,6 +19,10 @@ pub struct AppConfig {
     pub editor: Option<String>,
     #[serde(default)]
     pub recent_projects: Vec<String>,
+    /// Directory holding global bean action scripts. `None` means the default
+    /// `<config_dir>/Beanstalk/scripts`. Supports a leading `~`.
+    #[serde(default)]
+    pub scripts_dir: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -28,6 +32,7 @@ impl Default for AppConfig {
             last_active_project: None,
             editor: None,
             recent_projects: vec![],
+            scripts_dir: None,
         }
     }
 }
@@ -199,6 +204,7 @@ mod tests {
             last_active_project: None,
             editor: None,
             recent_projects: vec![],
+            scripts_dir: None,
         };
 
         save_config_to(&cfg, &path).unwrap();
@@ -227,6 +233,7 @@ mod tests {
             ],
             last_active_project: Some("/tmp/alpha".to_string()),
             editor: Some("code".to_string()),
+            scripts_dir: Some("/tmp/scripts".to_string()),
             recent_projects: vec!["/tmp/alpha".to_string()],
         };
 

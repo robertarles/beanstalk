@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import type { Bean } from './types/beans';
-import { updateBean, updateBeanStatus, touchBean, openBeanInEditor, startWatching, stopWatching } from './lib/tauri';
+import type { Bean, BeanScript } from './types/beans';
+import { updateBean, updateBeanStatus, touchBean, openBeanInEditor, startWatching, stopWatching, listBeanScripts, runBeanScript, getScriptsDirs } from './lib/tauri';
 import { CreateBeanForm } from './components/CreateBeanForm';
 import { useConfig } from './hooks/useConfig';
 import { useBeans } from './hooks/useBeans';
@@ -12,6 +12,7 @@ import { BeanList, collectTags } from './components/BeanList';
 import { BeanDetail } from './components/BeanDetail';
 import { Toast } from './components/Toast';
 import { KeyboardHelp } from './components/KeyboardHelp';
+import { BeanActionMenu, type MenuAnchor } from './components/BeanActionMenu';
 
 /** Count beans that are stale: critical not updated in 12h, or high not updated in 48h. */
 function countStaleBeans(beans: Bean[]): number {
@@ -114,6 +115,101 @@ function App() {
     }
   }, [showToast]);
 
+  // ── Bean action menu (Space / right-click) ────────────────────────────────
+  const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
+  const [menuBeanId, setMenuBeanId] = useState<string | null>(null);
+  const [scripts, setScripts] = useState<BeanScript[]>([]);
+  const [scriptsLoading, setScriptsLoading] = useState(false);
+  const [scriptsDirs, setScriptsDirs] = useState<string[]>([]);
+
+  /**
+   * Open the menu for `beanId` at `at`, and (re)discover scripts.
+   *
+   * Discovery runs on every open rather than being cached, so a script the
+   * user just dropped into the scripts directory shows up without a restart.
+   */
+  const openActionMenu = useCallback((beanId: string, at: MenuAnchor) => {
+    const project = activeProjectRef.current;
+    if (!project) return;
+    setMenuBeanId(beanId);
+    setMenuAnchor(at);
+    setScriptsLoading(true);
+    listBeanScripts(project)
+      .then(setScripts)
+      .catch((err) => {
+        console.error('Failed to list bean scripts:', err);
+        setScripts([]);
+      })
+      .finally(() => setScriptsLoading(false));
+    getScriptsDirs(project).then(setScriptsDirs).catch(() => setScriptsDirs([]));
+  }, []);
+
+  const closeActionMenu = useCallback(() => {
+    setMenuAnchor(null);
+    setMenuBeanId(null);
+  }, []);
+
+  /**
+   * `Space` opens the menu anchored to the selected row, so the keyboard path
+   * lands in the same place the mouse path would.
+   */
+  const handleKbOpenActionMenu = useCallback(() => {
+    const beanId = selectedBeanIdRef.current;
+    if (!beanId) return;
+    const row = document.querySelector<HTMLElement>(`[data-bean-row="${CSS.escape(beanId)}"]`);
+    const rect = row?.getBoundingClientRect();
+    openActionMenu(beanId, rect ? { x: rect.left + 24, y: rect.bottom } : { x: 120, y: 120 });
+  }, [openActionMenu]);
+
+  /**
+   * Run a script and report the outcome.
+   *
+   * A script that edits the bean file needs no explicit refresh here — the
+   * file watcher already picks that up — but refreshing anyway keeps the list
+   * correct for scripts that write via another path.
+   */
+  const handleRunScript = useCallback(
+    async (scriptId: string) => {
+      const project = activeProjectRef.current;
+      const beanId = menuBeanId;
+      if (!project || !beanId) return;
+      try {
+        const result = await runBeanScript(project, beanId, scriptId);
+        // Prefer the script's own words; fall back to a generic outcome.
+        const detail = (result.stderr.trim() || result.stdout.trim()).split('\n')[0];
+        if (result.timed_out) {
+          showToast(`${result.name} timed out`, 'error');
+        } else if (!result.success) {
+          showToast(detail || `${result.name} failed (exit ${result.exit_code ?? '?'})`, 'error');
+        } else {
+          showToast(detail || `${result.name} finished`, 'success');
+        }
+      } catch (e) {
+        console.error('Failed to run bean script:', e);
+        showToast(e instanceof Error ? e.message : 'Failed to run script', 'error');
+      } finally {
+        refresh();
+      }
+    },
+    [menuBeanId, showToast, refresh]
+  );
+
+  /**
+   * Open the editor for the bean the menu was opened on, rather than for the
+   * current selection. Right-click selects the row first so the two normally
+   * agree, but the menu must act on what it is labelled with.
+   */
+  const handleMenuEditExternal = useCallback(async () => {
+    const project = activeProjectRef.current;
+    if (!menuBeanId || !project) return;
+    try {
+      await openBeanInEditor(project, menuBeanId);
+    } catch (e) {
+      console.error('Failed to open bean in editor:', e);
+      showToast(e instanceof Error ? e.message : 'Failed to open bean in editor', 'error');
+    }
+  }, [menuBeanId, showToast]);
+
   const handleKbEnterEditMode = useCallback(() => {
     beanDetailEditStartRef.current?.();
   }, []);
@@ -184,6 +280,7 @@ function App() {
     onCycleStatus: handleKbCycleStatus,
     onCopyId: handleKbCopyId,
     onToggleExpand: handleKbToggleExpand,
+    onOpenActionMenu: handleKbOpenActionMenu,
   });
 
   // Keep selectedBeanIndexRef current so handleKbToggleExpand is never stale
@@ -414,6 +511,7 @@ function App() {
             onFlatListChange={handleFlatListChange}
             registerEscapeHandler={registerEscapeHandler}
             toggleExpandRef={beanListToggleExpandRef}
+            onContextMenu={openActionMenu}
           />
         }
         detail={
@@ -446,6 +544,18 @@ function App() {
             />
           )
         }
+      />
+      {/* Bean action menu (Space / right-click) */}
+      <BeanActionMenu
+        open={menuAnchor !== null}
+        anchor={menuAnchor}
+        beanTitle={(menuBeanId ? findBeanById(beans, menuBeanId)?.title : null) ?? ''}
+        scripts={scripts}
+        loading={scriptsLoading}
+        scriptsDirs={scriptsDirs}
+        onEditExternal={handleMenuEditExternal}
+        onRun={handleRunScript}
+        onClose={closeActionMenu}
       />
       {/* Keyboard help overlay */}
       <KeyboardHelp
