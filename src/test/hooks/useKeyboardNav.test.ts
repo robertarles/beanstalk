@@ -78,3 +78,62 @@ describe('useKeyboardNav — action menu binding', () => {
     expect(() => press(' ', 'Space')).not.toThrow()
   })
 })
+
+describe('useKeyboardNav — gg / G jump bindings', () => {
+  it('jumps to the top on `g g`', () => {
+    const { onSelectIndex } = setup()
+    press('g', 'KeyG')
+    press('g', 'KeyG')
+    expect(onSelectIndex).toHaveBeenCalledWith(0)
+  })
+
+  it('jumps to the bottom on Shift+G', () => {
+    const { onSelectIndex } = setup()
+    press('G', 'KeyG', document, { shiftKey: true })
+    expect(onSelectIndex).toHaveBeenCalledWith(2)
+  })
+
+  it('does not jump on a single `g`', () => {
+    // tinykeys compares keys case-insensitively, so a bare `G` binding also
+    // matches a plain `g` press and would fire alongside the `g` handler --
+    // making one `g` behave like `G` and breaking the `gg` sequence.
+    const { onSelectIndex } = setup()
+    press('g', 'KeyG')
+    expect(onSelectIndex).not.toHaveBeenCalled()
+  })
+
+  it('does not treat `g` then Shift+G as a jump to the top', () => {
+    const { onSelectIndex } = setup()
+    press('g', 'KeyG')
+    press('G', 'KeyG', document, { shiftKey: true })
+    expect(onSelectIndex).toHaveBeenCalledWith(2)
+    expect(onSelectIndex).not.toHaveBeenCalledWith(0)
+  })
+})
+
+describe('useKeyboardNav — gg sequence timeout', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('forgets a pending `g` after the 500ms window', () => {
+    vi.useFakeTimers()
+    const { onSelectIndex } = setup()
+    press('g', 'KeyG')
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    press('g', 'KeyG')
+    // The second `g` starts a fresh sequence rather than completing the first.
+    expect(onSelectIndex).not.toHaveBeenCalled()
+  })
+
+  it('still completes when the two presses are inside the window', () => {
+    vi.useFakeTimers()
+    const { onSelectIndex } = setup()
+    press('g', 'KeyG')
+    act(() => {
+      vi.advanceTimersByTime(100)
+    })
+    press('g', 'KeyG')
+    expect(onSelectIndex).toHaveBeenCalledWith(0)
+  })
+})

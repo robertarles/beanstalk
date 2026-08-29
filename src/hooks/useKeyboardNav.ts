@@ -116,6 +116,13 @@ export function useKeyboardNav({
   // Pending-key timeout handle for 'g g' sequence
   const pendingKeyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Source of truth for the pending key. It must be a ref, not state: the two
+  // presses of `g g` are handled by a listener outside React, so state written
+  // by the first press is not visible to the second until a re-render has
+  // happened in between. The state copy below exists only so the value can be
+  // rendered.
+  const pendingKeyRef = useRef<string | null>(null);
+
   // ---------------------------------------------------------------------------
   // Navigation actions (stable references, use refs internally)
   // ---------------------------------------------------------------------------
@@ -234,6 +241,7 @@ export function useKeyboardNav({
       clearTimeout(pendingKeyTimerRef.current);
       pendingKeyTimerRef.current = null;
     }
+    pendingKeyRef.current = null;
     setState((s) => ({ ...s, pendingKey: null }));
   }
 
@@ -277,22 +285,31 @@ export function useKeyboardNav({
         if (isInputTarget(event)) return;
         if (stateRef.current.isModalOpen) return;
         event.preventDefault();
-        const { pendingKey } = stateRef.current;
+        const pendingKey = pendingKeyRef.current;
         if (pendingKey === 'g') {
           // 'g g' sequence — jump to first
           clearPendingKey();
           jumpToFirst();
         } else {
           // Start waiting for second 'g'
+          pendingKeyRef.current = 'g';
           setState((s) => ({ ...s, pendingKey: 'g' }));
           if (pendingKeyTimerRef.current) clearTimeout(pendingKeyTimerRef.current);
           pendingKeyTimerRef.current = setTimeout(() => {
+            pendingKeyRef.current = null;
             setState((s) => ({ ...s, pendingKey: null }));
             pendingKeyTimerRef.current = null;
           }, 500);
         }
       },
-      G: (event: KeyboardEvent) => {
+      // Must be `Shift+g`, not a bare `G`: tinykeys compares keys
+      // case-insensitively, so a bare `G` also matches a plain `g` press and
+      // fires alongside the `g` handler -- which cleared the pending key and
+      // jumped to the bottom, making one `g` behave like `G` and leaving the
+      // `g g` sequence unable to complete. Naming Shift explicitly also fixes
+      // the mirror problem: tinykeys rejects a binding when an unlisted
+      // modifier is held, so a bare `G` never matched an actual Shift+G.
+      'Shift+g': (event: KeyboardEvent) => {
         if (isInputTarget(event)) return;
         if (stateRef.current.isModalOpen) return;
         event.preventDefault();
