@@ -320,14 +320,30 @@ pub fn search_beans(
 /// The default GUI editors to try, in order, when no editor is configured in
 /// settings. TextEdit ships with macOS and is always present, so it is the
 /// guaranteed final fallback.
+#[cfg(target_os = "macos")]
 const DEFAULT_EDITOR_APPS: [&str; 3] = ["Neovide", "Visual Studio Code", "TextEdit"];
+
+/// The default editors to try, in order, when no editor is configured in
+/// settings. Unlike macOS these are plain executables resolved on PATH, so the
+/// list can end with `xdg-open`: it ships with xdg-utils (pulled in by every
+/// desktop environment) and hands the file to whatever the user registered for
+/// its MIME type, making it the guaranteed final fallback.
+#[cfg(not(target_os = "macos"))]
+const DEFAULT_EDITOR_APPS: [&str; 5] = [
+    "neovide",
+    "code",
+    "gnome-text-editor",
+    "gedit",
+    "xdg-open",
+];
 
 /// What to launch when opening a bean file.
 #[derive(Debug, PartialEq)]
 enum EditorChoice {
     /// A user-configured editor command (may include arguments), spawned directly.
     Command(String),
-    /// No editor configured: try these macOS apps in order via `open -a`.
+    /// No editor configured: try these apps in order, stopping at the first
+    /// one that launches. See `open_with_app` for what "app" means per platform.
     AppChain(Vec<String>),
 }
 
@@ -350,14 +366,34 @@ fn resolve_editor_choice(configured: Option<String>) -> EditorChoice {
     }
 }
 
-/// Directories where CLI editors are commonly installed (e.g. Homebrew) but
-/// which are missing from a macOS GUI app's inherited PATH. A `.app` bundle
-/// launched from Finder does not see the login shell's PATH, so a configured
-/// editor like `neovide` (installed at /opt/homebrew/bin) would otherwise fail
-/// to spawn.
-const EXTRA_PATH_DIRS: [&str; 3] = ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin"];
+/// Directories where CLI editors are commonly installed but which a GUI
+/// process's inherited PATH may omit. Neither a `.app` bundle launched from
+/// Finder nor an app launched from a `.desktop` entry sees the login shell's
+/// PATH, so a configured editor like `neovide` would otherwise fail to spawn.
+fn extra_path_dirs() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    {
+        ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut paths: Vec<String> = ["/usr/local/bin", "/var/lib/flatpak/exports/bin"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        // Per-user installs (`cargo install`, pipx, `pip --user`) land here and
+        // are the most likely editor location a desktop session's PATH misses.
+        if let Some(home) = dirs::home_dir() {
+            paths.push(home.join(".local/bin").to_string_lossy().into_owned());
+        }
+        paths
+    }
+}
 
-/// The inherited `PATH` with `EXTRA_PATH_DIRS` appended (skipping any already
+/// The inherited `PATH` with `extra_path_dirs()` appended (skipping any already
 /// present). Used both to resolve the configured editor binary and as the child
 /// process's PATH so the editor's own subprocesses have a sane environment.
 pub(crate) fn augmented_path() -> String {
@@ -367,9 +403,9 @@ pub(crate) fn augmented_path() -> String {
     } else {
         inherited.split(':').map(|s| s.to_string()).collect()
     };
-    for extra in EXTRA_PATH_DIRS {
-        if !dirs.iter().any(|d| d == extra) {
-            dirs.push(extra.to_string());
+    for extra in extra_path_dirs() {
+        if !dirs.iter().any(|d| d == &extra) {
+            dirs.push(extra);
         }
     }
     dirs.join(":")
@@ -398,12 +434,14 @@ fn resolve_program_path(program: &str) -> Option<PathBuf> {
 /// How to launch a configured editor's program.
 #[derive(Debug, PartialEq)]
 enum EditorTarget {
-    /// A macOS `.app` bundle path — launch via `open -a`.
+    /// A macOS `.app` bundle path — hand to `open_with_app`. Not meaningful on
+    /// other platforms, where it simply reports the bundle as unavailable.
     AppBundle(String),
     /// A resolved executable — spawn directly (arguments preserved).
     Binary(PathBuf),
-    /// A bare name that is not an executable — treat as a macOS app name and
-    /// launch via `open -a` (e.g. `neovide` -> Neovide.app).
+    /// A bare name that is not an executable on PATH — hand to `open_with_app`,
+    /// which on macOS resolves it as an application name (`neovide` ->
+    /// Neovide.app) and elsewhere reports it as unavailable.
     AppName(String),
 }
 
@@ -420,8 +458,8 @@ fn classify_editor_program(program: &str) -> EditorTarget {
 
 /// Launch a configured editor command (e.g. "code --wait", "neovide", or
 /// "/Applications/Neovide.app") on `file_path`. Real binaries are spawned
-/// directly with their arguments; `.app` bundles and bare app names are opened
-/// via `open -a`.
+/// directly with their arguments; `.app` bundles and bare app names go through
+/// `open_with_app`.
 fn launch_editor_command(command: &str, file_path: &str) -> Result<(), String> {
     let mut parts = command.split_whitespace();
     let program = parts
@@ -448,6 +486,7 @@ fn launch_editor_command(command: &str, file_path: &str) -> Result<(), String> {
 /// Open `file_path` in a macOS application by name via `open -a`. Returns an
 /// error (without launching anything) when the app is not installed, so the
 /// caller can try the next candidate in the chain.
+#[cfg(target_os = "macos")]
 fn open_with_app(app: &str, file_path: &str) -> Result<(), String> {
     let status = std::process::Command::new("open")
         .arg("-a")
@@ -460,6 +499,28 @@ fn open_with_app(app: &str, file_path: &str) -> Result<(), String> {
     } else {
         Err(format!("Application '{}' is not available", app))
     }
+}
+
+/// Open `file_path` with `app` on non-macOS platforms. There is no `open -a`
+/// equivalent — an "app" here is just an executable on the augmented PATH,
+/// invoked as `app <file>`, which covers both the default chain (ending at
+/// `xdg-open`) and a configured program name. Returns an error *without*
+/// launching anything when the program is not installed, so the caller can try
+/// the next candidate in the chain.
+///
+/// Spawned rather than waited on: unlike `open -a`, which returns as soon as it
+/// has handed the file off, these are the editors themselves and would block
+/// the command until the user closed the window.
+#[cfg(not(target_os = "macos"))]
+fn open_with_app(app: &str, file_path: &str) -> Result<(), String> {
+    let bin = resolve_program_path(app)
+        .ok_or_else(|| format!("Application '{}' is not available", app))?;
+    std::process::Command::new(bin)
+        .arg(file_path)
+        .env("PATH", augmented_path())
+        .spawn()
+        .map_err(|e| format!("Failed to launch '{}': {e}", app))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -800,22 +861,53 @@ mod tests {
     #[test]
     fn test_resolve_editor_choice_default_chain_when_unconfigured() {
         // Blank and None both fall back to the default app chain, in order.
+        #[cfg(target_os = "macos")]
         let expected = EditorChoice::AppChain(vec![
             "Neovide".to_string(),
             "Visual Studio Code".to_string(),
             "TextEdit".to_string(),
+        ]);
+        // Elsewhere the chain is executables, ending at the xdg-open catch-all.
+        #[cfg(not(target_os = "macos"))]
+        let expected = EditorChoice::AppChain(vec![
+            "neovide".to_string(),
+            "code".to_string(),
+            "gnome-text-editor".to_string(),
+            "gedit".to_string(),
+            "xdg-open".to_string(),
         ]);
         assert_eq!(resolve_editor_choice(None), expected);
         assert_eq!(resolve_editor_choice(Some("   ".to_string())), expected);
     }
 
     #[test]
-    fn test_augmented_path_includes_homebrew() {
-        // The augmented PATH always contains the Homebrew bin dir so a GUI app
-        // (whose inherited PATH omits it) can still find CLI editors.
-        assert!(augmented_path()
-            .split(':')
-            .any(|d| d == "/opt/homebrew/bin"));
+    fn test_augmented_path_includes_extra_dirs() {
+        // The augmented PATH always contains the platform's extra editor dirs
+        // so a GUI app (whose inherited PATH omits them) can still find CLI
+        // editors: Homebrew on macOS, /usr/local/bin elsewhere.
+        let path = augmented_path();
+        let dirs: Vec<&str> = path.split(':').collect();
+        #[cfg(target_os = "macos")]
+        assert!(dirs.contains(&"/opt/homebrew/bin"), "got {path}");
+        #[cfg(not(target_os = "macos"))]
+        assert!(dirs.contains(&"/usr/local/bin"), "got {path}");
+    }
+
+    #[test]
+    fn test_extra_path_dirs_are_absolute_and_non_empty() {
+        let extras = extra_path_dirs();
+        assert!(!extras.is_empty());
+        assert!(extras.iter().all(|d| d.starts_with('/')), "got {extras:?}");
+    }
+
+    #[test]
+    fn test_open_with_app_unavailable_app_errors_without_launching() {
+        // Every platform must report an unavailable app as an error rather than
+        // launching something, so open_bean_in_editor can fall through to the
+        // next candidate in the chain.
+        let err = open_with_app("definitely-not-a-real-editor-xyz", "/tmp/beanstalk-no-such-file.md")
+            .expect_err("unavailable app should not launch");
+        assert!(err.contains("definitely-not-a-real-editor-xyz"), "got {err}");
     }
 
     #[test]
@@ -847,7 +939,7 @@ mod tests {
             other => panic!("expected Binary, got {other:?}"),
         }
         // A bare name that is not an executable falls back to an app name, so
-        // `open -a <name>` can find the matching macOS application.
+        // macOS can still find the matching application via `open -a <name>`.
         assert_eq!(
             classify_editor_program("no-such-binary-xyz"),
             EditorTarget::AppName("no-such-binary-xyz".to_string())
