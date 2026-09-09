@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help all clean build test coverage report-index install
+.PHONY: help all clean build test coverage report-index install build-fedora
 
 # ── Report locations (generated; gitignored — see CONTRIBUTING.md) ────────────
 REPORTS       := reports
@@ -65,3 +65,48 @@ install: clean ## Build and install the app to ~/Applications (macOS)
 	# nests a copy inside an existing bundle instead of replacing it, which
 	# silently leaves the old build in place.
 	cp -R src-tauri/target/release/bundle/macos/Beanstalk.app "$(HOME)/Applications/"
+
+# ── Linux (Fedora) build ──────────────────────────────────────────────────────
+# Run `build-fedora` ON the Fedora host — e.g. the `empire` aarch64 guest — from
+# its own clone of this repo. It cannot be driven from macOS: Tauri links the app
+# against the host's GTK3 + webkit2gtk stack, so the build must be native.
+#
+# One-time host setup:
+#   sudo dnf install -y gcc gcc-c++ make pkgconf-pkg-config openssl-devel \
+#     webkit2gtk4.1-devel gtk3-devel librsvg2-devel libappindicator-gtk3-devel \
+#     rpm-build patchelf nodejs npm
+#   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+#   cargo install tauri-cli --version '^2' --locked
+
+# Dev libraries Tauri needs at link time, by pkg-config name.
+FEDORA_DEV_LIBS := webkit2gtk-4.1 gtk+-3.0 librsvg-2.0
+
+build-fedora: ## Build the Linux rpm bundle (run on the Fedora host, not macOS)
+	@[ "$$(uname -s)" = Linux ] || { \
+		echo "build-fedora must run on the Fedora host; this is $$(uname -s)."; \
+		echo "Clone the repo there (e.g. \`limactl shell empire\`) and run it from that checkout."; \
+		exit 1; }
+	@command -v cargo >/dev/null || { \
+		echo "cargo not found. Install rustup:"; \
+		echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"; \
+		exit 1; }
+	@command -v cargo-tauri >/dev/null || { \
+		echo "cargo-tauri not found. Install it:"; \
+		echo "  cargo install tauri-cli --version '^2' --locked"; \
+		exit 1; }
+	@command -v npm >/dev/null || { echo "npm not found: sudo dnf install -y nodejs npm"; exit 1; }
+	@missing=""; for lib in $(FEDORA_DEV_LIBS); do \
+		pkg-config --exists "$$lib" || missing="$$missing $$lib"; \
+	done; \
+	[ -z "$$missing" ] || { \
+		echo "Missing dev libraries:$$missing"; \
+		echo "  sudo dnf install -y webkit2gtk4.1-devel gtk3-devel librsvg2-devel libappindicator-gtk3-devel"; \
+		exit 1; }
+	@[ -d node_modules ] || npm ci
+	# `cargo tauri build` runs beforeBuildCommand (npm run build) itself, so the
+	# frontend is rebuilt here too. No `clean` prerequisite: a cargo clean would
+	# force a full recompile of the dependency tree on every Linux build.
+	cd src-tauri && cargo tauri build --bundles rpm
+	@echo
+	@echo "rpm bundle: src-tauri/target/release/bundle/rpm/"
+	@ls -1 src-tauri/target/release/bundle/rpm/*.rpm 2>/dev/null || true

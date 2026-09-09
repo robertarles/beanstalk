@@ -1,5 +1,5 @@
 beans:
-    path: .beans
+    path: "../../../decrypted.mnt/notes/projects/terminus/~/src/robertarles/beanstalk/.beans"
     prefix: beanstalk-
     id_length: 4
     default_status: todo
