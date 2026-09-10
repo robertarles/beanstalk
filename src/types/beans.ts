@@ -60,3 +60,10 @@ export interface ScriptOutput {
   stderr: string;
   timed_out: boolean;
 }
+
+/** The OS-level dark mode / text scaling preference, as detected natively. */
+export interface SystemAppearance {
+  prefers_dark: boolean;
+  /** e.g. 1.25 for GNOME's "Large Text" accessibility setting. */
+  text_scale: number;
+}

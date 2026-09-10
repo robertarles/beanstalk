@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help all clean build test coverage report-index install build-fedora
+.PHONY: help all clean build test coverage report-index install build-fedora install-fedora
 
 # ── Report locations (generated; gitignored — see CONTRIBUTING.md) ────────────
 REPORTS       := reports
@@ -110,3 +110,18 @@ build-fedora: ## Build the Linux rpm bundle (run on the Fedora host, not macOS)
 	@echo
 	@echo "rpm bundle: src-tauri/target/release/bundle/rpm/"
 	@ls -1 src-tauri/target/release/bundle/rpm/*.rpm 2>/dev/null || true
+
+# A rebuild keeps whatever version tauri.conf.json declares, so the rpm usually
+# has the same name-version-release as the installed one. `dnf install` treats
+# that as nothing to do; `dnf reinstall` is what actually replaces the files.
+install-fedora: build-fedora ## Build and install the rpm (run on the Fedora host)
+	@rpmfile=$$(ls -1t src-tauri/target/release/bundle/rpm/*.rpm 2>/dev/null | head -1); \
+	[ -n "$$rpmfile" ] || { echo "No rpm under src-tauri/target/release/bundle/rpm/."; exit 1; }; \
+	nvra=$$(rpm -qp --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}' "$$rpmfile"); \
+	if rpm -q "$$nvra" >/dev/null 2>&1; then \
+		echo "Reinstalling $$nvra from $$rpmfile"; \
+		sudo dnf reinstall -y "$$rpmfile"; \
+	else \
+		echo "Installing $$nvra from $$rpmfile"; \
+		sudo dnf install -y "$$rpmfile"; \
+	fi

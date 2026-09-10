@@ -1,8 +1,21 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/*
+ * Dark mode is driven by a `.dark` class on <html> instead of Tailwind's
+ * default `prefers-color-scheme` media query. On Linux, WebKitGTK/GTK3
+ * doesn't reliably report `prefers-color-scheme` from GNOME/KDE's dark-mode
+ * setting, so we detect it ourselves (see src/lib/appearance.ts, backed by
+ * the `get_system_appearance` Tauri command) and toggle the class directly.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   color-scheme: light dark;
+}
+
+:root.dark {
+  color-scheme: dark;
 }
 
 body {
@@ -14,11 +27,9 @@ body {
   user-select: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #111827;
-    color: #f9fafb;
-  }
+.dark body {
+  background-color: #111827;
+  color: #f9fafb;
 }
 
 input, textarea, [contenteditable] {

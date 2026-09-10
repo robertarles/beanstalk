@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl as tauriOpenUrl } from '@tauri-apps/plugin-opener';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
-import type { Bean, AppConfig, BeanScript, ScriptOutput } from '../types/beans';
+import type { Bean, AppConfig, BeanScript, ScriptOutput, SystemAppearance } from '../types/beans';
 
 export const getBeans = (projectPath: string) =>
   invoke<Bean[]>('get_beans', { projectPath });
@@ -92,3 +92,5 @@ export const openUrl = (url: string): Promise<void> => tauriOpenUrl(url);
 export const pickProjectFolder = (): Promise<string | null> =>
   dialogOpen({ directory: true, multiple: false, title: 'Select Project Directory' })
     .then((result) => (typeof result === 'string' ? result : null));
+
+export const getSystemAppearance = () => invoke<SystemAppearance>('get_system_appearance');

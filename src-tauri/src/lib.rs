@@ -6,6 +6,7 @@ pub mod beans;     // Bean file parsing and data models
 pub mod config; // Application configuration persistence
 pub mod watcher;   // File system watcher for live bean updates
 pub mod scripts;   // User-provided bean action scripts
+pub mod appearance; // System dark-mode / text-scaling detection (Linux)
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -20,6 +21,7 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            appearance::watch(app.handle().clone());
             Ok(())
         })
         .manage(std::sync::Mutex::new(std::collections::HashMap::<String, watcher::FileWatcher>::new()))
@@ -41,6 +43,7 @@ pub fn run() {
             scripts::commands::get_scripts_dirs,
             watcher::start_watching,
             watcher::stop_watching,
+            appearance::get_system_appearance,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
