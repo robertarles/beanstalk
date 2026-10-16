@@ -23,6 +23,12 @@ pub struct AppConfig {
     /// `<config_dir>/Beanstalk/scripts`. Supports a leading `~`.
     #[serde(default)]
     pub scripts_dir: Option<String>,
+    /// Path to the `beans` binary. `None` means resolve from `PATH`, then from a
+    /// short list of common install directories. Beanstalk writes bean files only
+    /// through this binary, so this is the escape hatch when it lives somewhere
+    /// unusual or a GUI-inherited `PATH` cannot see it.
+    #[serde(default)]
+    pub beans_bin: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -33,6 +39,7 @@ impl Default for AppConfig {
             editor: None,
             recent_projects: vec![],
             scripts_dir: None,
+            beans_bin: None,
         }
     }
 }
@@ -205,6 +212,7 @@ mod tests {
             editor: None,
             recent_projects: vec![],
             scripts_dir: None,
+            beans_bin: None,
         };
 
         save_config_to(&cfg, &path).unwrap();
@@ -235,6 +243,7 @@ mod tests {
             editor: Some("code".to_string()),
             scripts_dir: Some("/tmp/scripts".to_string()),
             recent_projects: vec!["/tmp/alpha".to_string()],
+            beans_bin: Some("/usr/local/bin/beans".to_string()),
         };
 
         save_config_to(&original, &path).unwrap();

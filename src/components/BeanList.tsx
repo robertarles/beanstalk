@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import Fuse from 'fuse.js';
 import type { Bean } from '../types/beans';
+import { relationTarget } from '../lib/beanTree';
 
 interface BeanListProps {
   beans: Bean[];
@@ -621,14 +622,12 @@ export const BeanList = memo(function BeanList({ beans, selectedId, onSelect, lo
                           tabIndex={0}
                           onClick={(e) => {
                             e.stopPropagation();
-                            const relatedId = bean.blocked_by[0] ?? bean.blocking[0];
-                            onSelect(relatedId);
+                            onSelect(relationTarget(bean));
                           }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.stopPropagation();
-                              const relatedId = bean.blocked_by[0] ?? bean.blocking[0];
-                              onSelect(relatedId);
+                              onSelect(relationTarget(bean));
                             }
                           }}
                           title={[

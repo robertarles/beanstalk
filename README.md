@@ -62,6 +62,124 @@ bean. `j`/`k` and the arrow keys move, `Enter` runs, `Escape` closes.
 "Edit (external)" is always the first entry; everything below it is a custom
 script.
 
+## Editing Beans
+
+Beanstalk reads bean files with its own parser but **writes them only through the
+`beans` CLI**. The file format belongs to beans, and every reimplementation drifts
+from it, so there is exactly one writer.
+
+Two consequences worth knowing:
+
+- **Editing needs `beans` on your `PATH`** (or a `beans_bin` path in the Beanstalk
+  config). Without it, Edit, Touch, the status dropdown and new-bean creation are
+  disabled, and the reason is shown on the disabled control. Reading is unaffected.
+- **The external editor is never gated.** `e`, and the `Editor ↗` button, launch
+  your editor and write nothing through Beanstalk, so they keep working when the
+  CLI is missing — and they can write frontmatter that beans does not model.
+
+There are two ways to edit a body:
+
+| | Inline (`i`) | External (`e`) |
+| --- | --- | --- |
+| Needs the `beans` CLI | yes | no |
+| `[[` bean picker | yes | no |
+| Suits long-form work | adequate | better |
+| Can write unmodelled frontmatter | no | yes |
+
+A save writes **only the fields you changed**; anything untouched is left exactly
+as it is on disk. Saving with nothing changed writes nothing — use `Touch` to bump
+`updated_at` deliberately.
+
+If a bean changes on disk while you have it open for editing, Beanstalk says so,
+and a body save is **refused** rather than overwriting the other change. Your text
+stays in the form; reload or reconcile in the external editor.
+
+> **No assignee field.** beans has no assignee, so Beanstalk cannot persist one.
+> An `assignee:` key already in a file is still read and displayed, and the
+> external editor can still set one — but any save through Beanstalk drops it,
+> because beans rewrites frontmatter it does not model. Custom data belongs in the
+> **body**, which beans preserves verbatim.
+
+## Linking Beans with `[[...]]`
+
+A bean body can reference another bean in prose, and the reference becomes a
+clickable link in the detail pane:
+
+```markdown
+Same root cause as [[beanstalk-4ad6]].
+Superseded by [[hivelens-7k2p|the UTM provider fix]].
+```
+
+This is for *mentions* — "same cause as X", "superseded by Y". Structural
+relationships stay in `parent`, `blocking` and `blocked_by`, which are dependency
+edges rather than prose.
+
+### What goes inside the brackets
+
+A **bean id**, and only a bean id. Titles are not accepted: they change, and two
+beans can share one. Ids survive a retitle.
+
+| Form                        | Renders as                                   |
+| --------------------------- | -------------------------------------------- |
+| `[[beanstalk-4ad6]]`        | the id, linked                                |
+| `[[beanstalk-4ad6\|label]]` | `label`, linked                               |
+| `[[BEANSTALK-4AD6]]`        | the same link — matching is case-insensitive  |
+| `[[ beanstalk-4ad6 ]]`      | the same link — whitespace is trimmed         |
+
+Only the first `|` splits the target from the label, so a label may contain
+further pipes. An empty label (`[[beanstalk-4ad6|]]`) falls back to the id.
+
+Type `[[` in a bean's description field to get a bean picker: arrow keys move,
+`Enter` or `Tab` inserts, `Escape` closes and leaves what you typed alone.
+
+### Links across projects
+
+A bare id works across projects. Nothing extra is needed — no `[[project:id]]`
+form exists, and none is required:
+
+```markdown
+Same root cause as [[hivelens-7k2p]].
+```
+
+Bean ids already carry their project's prefix (the `prefix` key in `.beans.yml`),
+so an id says which project owns it. A link to another project you have added to
+Beanstalk is shown in violet with an `↗` marker; hovering it reveals that bean's
+title, and clicking it switches to that project and selects the bean.
+
+A link to a project you have **not** added to Beanstalk cannot be resolved, and
+reads as missing.
+
+### Missing links
+
+An id that resolves nowhere renders as dimmed, non-clickable text reading
+**missing or archived** on hover. There are two ordinary reasons for it:
+
+- the bean was deleted, or
+- the bean was **archived**. `beans archive` moves a bean into `.beans/archive`,
+  which Beanstalk does not scan, so an archived bean cannot be resolved even
+  though its file still exists.
+
+The wording says "missing or archived" rather than "unknown" precisely because
+archiving is the common case and is nobody's mistake.
+
+> **Known issue — colliding project prefixes.** Nothing currently stops two
+> projects declaring the same `prefix` in `.beans.yml`, or both defaulting to
+> `bean-` by declaring none. Ids would then collide, so Beanstalk refuses to
+> resolve links with an ambiguous prefix rather than guessing a project: they read
+> as missing. Give each project a distinct prefix.
+
+### Writing a literal `[[`
+
+Use inline code:
+
+```markdown
+Write `[[like this]]` to show the brackets literally.
+```
+
+Backslashes do **not** work here. Markdown consumes `\[\[` before Beanstalk sees
+the text, leaving it identical to an unescaped `[[`, so `\[\[x\]\]` still becomes
+a link. Fenced code blocks are left alone too.
+
 ## Custom Scripts
 
 The action menu lists any executable file found in either scripts directory:

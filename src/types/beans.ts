@@ -26,12 +26,41 @@ export interface Project {
   name: string;
 }
 
+/**
+ * A configured project together with the id prefix its beans carry.
+ *
+ * Bean ids are minted as `{prefix}{random}`, so the prefix alone says which
+ * project owns an id — which is what makes a bare `[[hivelens-7k2p]]` resolvable
+ * across projects with no project-qualified link syntax.
+ */
+export interface ProjectPrefix {
+  path: string;
+  name: string;
+  prefix: string;
+}
+
+/** Whether bean writes are possible, and which binary would perform them. */
+export interface BeansCliStatus {
+  available: boolean;
+  path: string | null;
+  version: string | null;
+  error: string | null;
+}
+
+/** A failed `beans` invocation. `code` is machine-readable (e.g. CONFLICT). */
+export interface BeansCliError {
+  code: string;
+  message: string;
+}
+
 export interface AppConfig {
   projects: Project[];
   last_active_project: string | null;
   editor: string | null;
   recent_projects: string[];
   scripts_dir: string | null;
+  /** Override for the `beans` binary path; null resolves from PATH. */
+  beans_bin: string | null;
 }
 
 /** Where a bean script was discovered. Project scripts shadow global ones. */
@@ -67,3 +96,5 @@ export interface SystemAppearance {
   /** e.g. 1.25 for GNOME's "Large Text" accessibility setting. */
   text_scale: number;
 }
+
+export type { PrefixMap } from '../lib/prefixMap';

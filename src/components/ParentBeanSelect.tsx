@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Bean } from '../types/beans';
+import { flattenBeans } from '../lib/beanTree';
 import { fuzzyFilterItems } from '../lib/fuzzy';
 
 interface ParentBeanSelectProps {
@@ -7,19 +8,6 @@ interface ParentBeanSelectProps {
   value: string | null;
   onChange: (parentId: string | null) => void;
   excludeId?: string; // exclude the current bean and its descendants
-}
-
-/** Flatten a bean tree into a flat list. */
-function flattenBeans(beans: Bean[]): Bean[] {
-  const result: Bean[] = [];
-  function walk(nodes: Bean[]) {
-    for (const node of nodes) {
-      result.push(node);
-      if (node.children.length > 0) walk(node.children);
-    }
-  }
-  walk(beans);
-  return result;
 }
 
 /** Collect the id of a bean and all its descendants. */

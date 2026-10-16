@@ -4,6 +4,11 @@ import { updateBean, updateBeanStatus, touchBean, openBeanInEditor, startWatchin
 import { CreateBeanForm } from './components/CreateBeanForm';
 import { useConfig } from './hooks/useConfig';
 import { useBeans } from './hooks/useBeans';
+import { useBeanSelection } from './hooks/useBeanSelection';
+import { useProjectPrefixes } from './hooks/useProjectPrefixes';
+import { useBeansCli } from './hooks/useBeansCli';
+import { findBeanById } from './lib/beanTree';
+import { asBeansError } from './lib/beansError';
 import { useToast } from './hooks/useToast';
 import { useKeyboardNav } from './hooks/useKeyboardNav';
 import { Layout } from './components/Layout';
@@ -46,24 +51,18 @@ function collectStatuses(beans: Bean[], out = new Set<string>()): string[] {
   return [...out].sort();
 }
 
-/** Recursively search a bean tree for a bean with the given id. */
-function findBeanById(beans: Bean[], id: string): Bean | null {
-  for (const bean of beans) {
-    if (bean.id === id) return bean;
-    if (bean.children && bean.children.length > 0) {
-      const found = findBeanById(bean.children, id);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
 function App() {
   const { config, loading: configLoading, addProject, removeProject, setActiveProject } = useConfig();
 
   const activeProject = config?.last_active_project ?? null;
 
   const { beans, loading: beansLoading, refresh, lastRefreshed, applyBeanUpdate } = useBeans(activeProject);
+
+  // Prefix → project routing for cross-project `[[...]]` links (beanstalk-1j24).
+  const prefixMap = useProjectPrefixes(config?.projects);
+
+  // Writes go through the `beans` binary, so editing is gated on it (beanstalk-dg1m).
+  const beansCli = useBeansCli();
 
   const [selectedBeanId, setSelectedBeanId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string[]>(['todo', 'in-progress', 'draft']);
@@ -307,6 +306,16 @@ function App() {
 
   const availableStatuses = collectStatuses(beans);
 
+  /** Select a bean here or in another configured project (beanstalk-wrvx). */
+  const handleSelectBean = useBeanSelection({
+    activeProject,
+    beans,
+    beansLoading,
+    setActiveProject,
+    select: setSelectedBeanId,
+    onError: (message) => showToast(message, 'error'),
+  });
+
   // Callbacks
   const handleSelectProject = useCallback(
     async (path: string) => {
@@ -382,7 +391,7 @@ function App() {
   );
 
   const handleSave = useCallback(
-    async (fields: Partial<Bean>) => {
+    async (fields: Partial<Bean> & { expectBody?: string }) => {
       if (!activeProject || !selectedBeanId) return;
       try {
         const updated = await updateBean({
@@ -391,19 +400,24 @@ function App() {
           title: fields.title,
           status: fields.status,
           tags: fields.tags,
-          assignee: fields.assignee,
           body: fields.body,
           parent: fields.parent,
           priority: fields.priority,
           blocking: fields.blocking,
           blockedBy: fields.blocked_by,
+          expectBody: fields.expectBody,
         });
         applyBeanUpdate(updated);
         refresh();
         showToast('Bean saved', 'success');
       } catch (err) {
         console.error('Failed to save bean:', err);
-        showToast(err instanceof Error ? err.message : 'Failed to save bean', 'error');
+        showToast(asBeansError(err).message, 'error');
+        // Rethrow so the detail pane keeps edit mode open with the user's text
+        // intact. Swallowing here would close the form on a refused save and
+        // discard the draft, which is exactly what the conflict guard exists to
+        // prevent (beanstalk-ep8j).
+        throw err;
       }
     },
     [activeProject, selectedBeanId, refresh, showToast]
@@ -519,6 +533,7 @@ function App() {
             <CreateBeanForm
               projectPath={activeProject ?? ''}
               allBeans={beans}
+              prefixMap={prefixMap}
               onCreated={(bean) => {
                 refresh();
                 setSelectedBeanId(bean.id);
@@ -539,6 +554,10 @@ function App() {
               availableStatuses={availableStatuses}
               allBeans={beans}
               projectPath={activeProject ?? undefined}
+              onSelectBean={handleSelectBean}
+              prefixMap={prefixMap}
+              beansAvailable={beansCli.available}
+              beansError={beansCli.error}
               registerEscapeHandler={registerEscapeHandler}
               onEditStartRef={beanDetailEditStartRef}
             />

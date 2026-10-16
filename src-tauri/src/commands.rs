@@ -2,7 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::beans::{parse_bean_file, parse_beans_config, scan_beans_directory, build_tree, Bean};
+use crate::beans::{scan_beans_directory, build_tree, Bean};
+use crate::beanscli::{diff_list_args, run_beans, BeansCliError};
 
 // ── Read commands (beanstalk-h9hz) ──────────────────────────────────────────
 
@@ -24,60 +25,8 @@ pub fn get_bean(project_path: String, bean_id: String) -> Result<Bean, String> {
 
 // ── Create command (beanstalk-o6fz) ─────────────────────────────────────────
 
-/// Convert a title to a filename-safe slug.
-///
-/// Lowercases the string, replaces every non-alphanumeric character with `-`,
-/// collapses consecutive dashes, and trims leading/trailing dashes.
-///
-/// "FEAT: add a file browser" → "feat-add-a-file-browser"
-fn title_to_slug(title: &str) -> String {
-    let mut slug: String = title
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect();
-    // Collapse consecutive dashes.
-    while slug.contains("--") {
-        slug = slug.replace("--", "-");
-    }
-    let slug = slug.trim_matches('-');
-    if slug.is_empty() { "bean".to_string() } else { slug.to_string() }
-}
 
-/// Generate a short random ID suffix using timestamp nanoseconds encoded in
-/// base-36. We take the last 4 characters to keep IDs short.
-fn random_suffix() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0) as u64;
-    // Mix with the low bits of full epoch millis for extra uniqueness.
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-    let n = (nanos ^ (millis.wrapping_mul(6364136223846793005))) & 0x00ff_ffff;
-    // Encode as base-36, pad / trim to exactly 4 chars.
-    base36_encode_u64(n % (36u64.pow(4)))
-}
 
-fn base36_encode_u64(mut n: u64) -> String {
-    const CHARS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-    if n == 0 {
-        return "0000".to_string();
-    }
-    let mut digits = Vec::new();
-    while n > 0 {
-        digits.push(CHARS[(n % 36) as usize] as char);
-        n /= 36;
-    }
-    // Pad to 4 and reverse.
-    while digits.len() < 4 {
-        digits.push('0');
-    }
-    digits.iter().rev().take(4).collect()
-}
 
 #[tauri::command]
 pub fn create_bean(
@@ -87,90 +36,89 @@ pub fn create_bean(
     bean_type: String,
     parent: Option<String>,
     tags: Option<Vec<String>>,
-    assignee: Option<String>,
     priority: Option<String>,
     body: Option<String>,
     blocking: Option<Vec<String>>,
     blocked_by: Option<Vec<String>>,
-) -> Result<Bean, String> {
-    let tags = tags.unwrap_or_default();
-    let blocking = blocking.unwrap_or_default();
-    let blocked_by = blocked_by.unwrap_or_default();
-    let body = body.unwrap_or_default();
-
-    // Read the project's .beans.yml to get the configured prefix.
-    let beans_cfg = parse_beans_config(Path::new(&project_path));
-    let prefix = beans_cfg.prefix.as_deref().unwrap_or("bean-");
-
-    // Canonical id: {prefix}{random_4chars}  e.g. "beanstalk-9w17"
-    let id = format!("{}{}", prefix, random_suffix());
-    // Slug: full title → filename-safe lowercase string
-    let slug = title_to_slug(&title);
-    // Filename: {id}--{slug}.md  e.g. "beanstalk-9w17--feat-add-a-file-browser.md"
-    let filename = format!("{}--{}.md", id, slug);
-
-    // Ensure the .beans directory exists.
+) -> Result<Bean, BeansCliError> {
+    // `beans` refuses a data directory that does not exist rather than creating
+    // one, so a first bean in a fresh project needs this.
     let beans_dir = Path::new(&project_path).join(".beans");
     std::fs::create_dir_all(&beans_dir)
-        .map_err(|e| format!("Failed to create .beans directory: {e}"))?;
+        .map_err(|e| BeansCliError::new("IO_FAILED", format!("could not create {beans_dir:?}: {e}")))?;
 
-    let file_path = beans_dir.join(&filename);
+    let mut args: Vec<String> = vec!["create".to_string(), title];
+    args.push("-s".to_string());
+    args.push(status);
+    args.push("-t".to_string());
+    args.push(bean_type);
 
-    // Build YAML frontmatter.
-    let now = chrono_now_iso();
-    // Tags block: omit entirely when empty (consistent with beans CLI).
-    let tags_block = if tags.is_empty() {
-        String::new()
-    } else {
-        let items = tags
-            .iter()
-            .map(|t| format!("    - {}", t))
-            .collect::<Vec<_>>()
-            .join("\n");
-        format!("tags:\n{}\n", items)
-    };
+    if let Some(p) = parent.filter(|p| !p.is_empty()) {
+        args.push("--parent".to_string());
+        args.push(p);
+    }
+    if let Some(p) = priority.filter(|p| !p.is_empty()) {
+        args.push("-p".to_string());
+        args.push(p);
+    }
+    for tag in tags.unwrap_or_default() {
+        args.push("--tag".to_string());
+        args.push(tag);
+    }
+    for id in blocking.unwrap_or_default() {
+        args.push("--blocking".to_string());
+        args.push(id);
+    }
+    for id in blocked_by.unwrap_or_default() {
+        args.push("--blocked-by".to_string());
+        args.push(id);
+    }
 
-    let parent_line = match &parent {
-        Some(p) => format!("parent: {}\n", p),
-        None => String::new(),
-    };
-    let assignee_line = match &assignee {
-        Some(a) => format!("assignee: {}\n", a),
-        None => String::new(),
-    };
-    let priority_line = match &priority {
-        Some(p) if !p.is_empty() => format!("priority: {}\n", p),
-        _ => String::new(),
-    };
-    let blocking_block = yaml_id_list_block("blocking", &blocking);
-    let blocked_by_block = yaml_id_list_block("blocked_by", &blocked_by);
+    // An empty body is not worth a stdin round trip, and `-d -` with no input
+    // is a needless difference from omitting the flag.
+    let body = body.unwrap_or_default();
+    let stdin_body = if body.is_empty() { None } else { Some(body.as_str()) };
+    if stdin_body.is_some() {
+        args.push("-d".to_string());
+        args.push("-".to_string());
+    }
 
-    // Frontmatter id is written as a YAML comment `# {id}` (beans CLI format).
-    let content = format!(
-        "---\n# {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}{}created_at: {}\nupdated_at: {}\n---\n{}",
-        id,
-        yaml_quote_str(&title),
-        status,
-        bean_type,
-        parent_line,
-        assignee_line,
-        priority_line,
-        tags_block,
-        blocking_block,
-        blocked_by_block,
-        now,
-        now,
-        body
-    );
+    let out = run_beans(Path::new(&project_path), &args, stdin_body)?;
 
-    std::fs::write(&file_path, &content)
-        .map_err(|e| format!("Failed to write bean file: {e}"))?;
+    // The id is minted by beans (from the project's configured prefix), so it
+    // has to come back out of the response before the bean can be re-read.
+    let created: CreateEnvelope = serde_json::from_str(&out)
+        .map_err(|e| BeansCliError::new("PARSE_FAILED", format!("could not read `beans create` output: {e}")))?;
 
-    parse_bean_file(&file_path).map_err(|e| e.to_string())
+    get_bean(project_path, created.bean.id).map_err(|e| BeansCliError::new("READ_FAILED", e))
+}
+
+/// Just enough of `beans create --json` to recover the minted id.
+#[derive(Debug, serde::Deserialize)]
+struct CreateEnvelope {
+    bean: CreatedBean,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct CreatedBean {
+    id: String,
 }
 
 // ── Update commands (beanstalk-kt0f) ────────────────────────────────────────
 
+/// Update a bean by delegating to the `beans` CLI (beanstalk-dg1m).
+///
+/// `expect_body` is the body the caller based its edit on. When supplied, the
+/// write is refused unless the body still on disk matches it (beanstalk-ep8j).
+/// Only the body needs this guard: every other field is omitted when unchanged
+/// and therefore taken from disk anyway, but the body *is* the field being
+/// replaced, so there is nothing to preserve it from.
+///
+/// Deliberately not `beans --if-match`. That compares against an etag the write
+/// path computes *after* applying defaults, which never matches the etag the
+/// read path reports for a bean missing a defaulted key -- and since a reload
+/// re-reads through the read path, such a bean could never be saved. 13 of 173
+/// beans across this user's projects are in exactly that state.
 #[tauri::command]
 pub fn update_bean(
     project_path: String,
@@ -178,87 +126,89 @@ pub fn update_bean(
     title: Option<String>,
     status: Option<String>,
     tags: Option<Vec<String>>,
-    assignee: Option<String>,
     body: Option<String>,
     parent: Option<String>,
     priority: Option<String>,
     blocking: Option<Vec<String>>,
     blocked_by: Option<Vec<String>>,
-) -> Result<Bean, String> {
-    let existing = get_bean(project_path.clone(), bean_id.clone())?;
-    let file_path_str = existing.file_path.clone();
-    let file_path = Path::new(&file_path_str);
+    expect_body: Option<String>,
+) -> Result<Bean, BeansCliError> {
+    // Read first: tags and relations are set incrementally by the CLI, so a
+    // "set this list" from the UI has to be diffed against what is on disk.
+    let existing = get_bean(project_path.clone(), bean_id.clone())
+        .map_err(|e| BeansCliError::new("READ_FAILED", e))?;
 
-    let new_title = title.unwrap_or(existing.title.clone());
-    let new_status = status.unwrap_or(existing.status.clone());
-    let new_tags = tags.unwrap_or(existing.tags.clone());
-    let new_assignee = assignee.or(existing.assignee.clone());
-    let new_body = body.unwrap_or(existing.body.clone());
-    // priority: Some("") = clear, Some("high") = set, None = keep existing
-    let new_priority = match priority {
-        Some(ref p) if p.is_empty() => None,
-        Some(p) => Some(p),
-        None => existing.priority.clone(),
-    };
-    // parent: Some("") = clear, Some(id) = set, None = keep existing
-    let new_parent = match parent {
-        Some(ref p) if p.is_empty() => None,
-        Some(p) => Some(p),
-        None => existing.parent.clone(),
-    };
-    let new_blocking = blocking.unwrap_or(existing.blocking.clone());
-    let new_blocked_by = blocked_by.unwrap_or(existing.blocked_by.clone());
+    // Checked here rather than in the frontend so the window between reading and
+    // writing is as small as it can be without the CLI's help.
+    if let Some(expected) = &expect_body {
+        // Compare fully trimmed. `beans` writes a blank line after the closing
+        // `---`, so a parsed body carries a leading newline the editor never
+        // showed, and normalises the trailing one. Comparing raw would make the
+        // guard fire on every save, which is worse than not having it.
+        if existing.body.trim() != expected.trim() {
+            return Err(BeansCliError::new(
+                "CONFLICT",
+                "This bean changed on disk while you were editing it. Your text has \
+                 not been written, and nothing was overwritten. Reload to see the \
+                 current version, or open it in the external editor to reconcile.",
+            ));
+        }
+    }
 
-    let now = chrono_now_iso();
-    let created_at = existing.created_at.as_deref().unwrap_or(&now).to_string();
+    let mut args: Vec<String> = vec!["update".to_string(), bean_id.clone()];
 
-    let tags_yaml = new_tags
-        .iter()
-        .map(|t| format!("  - {}", t))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let tags_block = if new_tags.is_empty() {
-        "tags: []\n".to_string()
-    } else {
-        format!("tags:\n{}\n", tags_yaml)
-    };
+    if let Some(t) = &title {
+        args.push("--title".to_string());
+        args.push(t.clone());
+    }
+    if let Some(st) = &status {
+        args.push("-s".to_string());
+        args.push(st.clone());
+    }
+    // An empty priority clears it, which is what the CLI documents.
+    if let Some(p) = &priority {
+        args.push("-p".to_string());
+        args.push(p.clone());
+    }
+    // Parent has a dedicated clear flag rather than an empty-value convention.
+    match &parent {
+        Some(p) if p.is_empty() => args.push("--remove-parent".to_string()),
+        Some(p) => {
+            args.push("--parent".to_string());
+            args.push(p.clone());
+        }
+        None => {}
+    }
+    if let Some(desired) = &tags {
+        args.extend(diff_list_args("--tag", "--remove-tag", &existing.tags, desired));
+    }
+    if let Some(desired) = &blocking {
+        args.extend(diff_list_args("--blocking", "--remove-blocking", &existing.blocking, desired));
+    }
+    if let Some(desired) = &blocked_by {
+        args.extend(diff_list_args("--blocked-by", "--remove-blocked-by", &existing.blocked_by, desired));
+    }
 
-    let parent_line = match &new_parent {
-        Some(p) => format!("parent: {}\n", p),
-        None => String::new(),
-    };
-    let assignee_line = match &new_assignee {
-        Some(a) => format!("assignee: {}\n", a),
-        None => String::new(),
-    };
-    let priority_line = match &new_priority {
-        Some(p) => format!("priority: {}\n", p),
-        None => String::new(),
-    };
-    let blocking_block = yaml_id_list_block("blocking", &new_blocking);
-    let blocked_by_block = yaml_id_list_block("blocked_by", &new_blocked_by);
+    // Stream the body rather than passing it in argv: no escaping, no size limit.
+    let stdin_body = body.as_deref();
+    if stdin_body.is_some() {
+        args.push("-d".to_string());
+        args.push("-".to_string());
+    }
 
-    let content = format!(
-        "---\nid: {}\ntitle: {}\nstatus: {}\ntype: {}\n{}{}{}{}{}{}created_at: {}\nupdated_at: {}\n---\n{}",
-        existing.id,
-        yaml_quote_str(&new_title),
-        new_status,
-        existing.bean_type,
-        priority_line,
-        parent_line,
-        assignee_line,
-        tags_block,
-        blocking_block,
-        blocked_by_block,
-        created_at,
-        now,
-        new_body
-    );
+    // `beans update` refuses a call with no changes (VALIDATION_ERROR). The Touch
+    // button is the legitimate caller of that shape, so express it as re-setting
+    // the current status, which bumps `updated_at` without altering anything.
+    if args.len() == 2 {
+        args.push("-s".to_string());
+        args.push(existing.status.clone());
+    }
 
-    std::fs::write(file_path, &content)
-        .map_err(|e| format!("Failed to write bean file: {e}"))?;
+    run_beans(Path::new(&project_path), &args, stdin_body)?;
 
-    parse_bean_file(file_path).map_err(|e| e.to_string())
+    // Re-read through Beanstalk's own parser rather than mapping the CLI's JSON,
+    // and by id rather than by path, so a future rename cannot strand us.
+    get_bean(project_path, bean_id).map_err(|e| BeansCliError::new("READ_FAILED", e))
 }
 
 #[tauri::command]
@@ -266,7 +216,7 @@ pub fn update_bean_status(
     project_path: String,
     bean_id: String,
     status: String,
-) -> Result<Bean, String> {
+) -> Result<Bean, BeansCliError> {
     update_bean(project_path, bean_id, None, Some(status), None, None, None, None, None, None, None)
 }
 
@@ -546,91 +496,28 @@ pub fn open_bean_in_editor(project_path: String, bean_id: String) -> Result<(), 
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/// Generate a YAML block-sequence entry for a list of IDs, or empty string if empty.
-fn yaml_id_list_block(key: &str, ids: &[String]) -> String {
-    if ids.is_empty() {
-        return String::new();
-    }
-    let items = ids
-        .iter()
-        .map(|id| format!("    - {}", id))
-        .collect::<Vec<_>>()
-        .join("\n");
-    format!("{}:\n{}\n", key, items)
-}
 
-/// Double-quote a string value for safe inclusion in YAML block mappings.
-/// Handles special characters (colons, hashes, brackets, quotes, newlines, etc.)
-/// that would corrupt YAML if written unquoted.
-fn yaml_quote_str(s: &str) -> String {
-    let escaped = s
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r");
-    format!("\"{}\"", escaped)
-}
 
-/// Return a basic ISO-8601 UTC timestamp using only std (no chrono crate).
-fn chrono_now_iso() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
 
-    // Convert Unix seconds to a calendar date/time (no external crate).
-    let (year, month, day, hour, min, sec) = unix_secs_to_datetime(secs);
-    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", year, month, day, hour, min, sec)
-}
 
-fn unix_secs_to_datetime(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
-    let sec = (secs % 60) as u32;
-    let min = ((secs / 60) % 60) as u32;
-    let hour = ((secs / 3600) % 24) as u32;
-
-    // Days since Unix epoch (1970-01-01).
-    let mut days = secs / 86400;
-
-    // Determine year.
-    let mut year = 1970u32;
-    loop {
-        let days_in_year = if is_leap(year) { 366 } else { 365 };
-        if days < days_in_year {
-            break;
-        }
-        days -= days_in_year;
-        year += 1;
-    }
-
-    // Determine month and day.
-    let leap = is_leap(year);
-    let month_days: &[u32] = if leap {
-        &[31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        &[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-    let mut month = 1u32;
-    for &md in month_days {
-        if (days as u32) < md {
-            break;
-        }
-        days -= md as u64;
-        month += 1;
-    }
-    let day = days as u32 + 1;
-
-    (year, month, day, hour, min, sec)
-}
-
-fn is_leap(year: u32) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
-}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
+    /// Writes go through the real `beans` binary (beanstalk-dg1m), so the tests
+    /// that exercise them are integration tests. Skip rather than fail where the
+    /// binary is absent: a missing CLI is a legitimate environment, and the unit
+    /// coverage for argument building lives in `crate::beanscli`.
+    macro_rules! require_beans {
+        () => {
+            if crate::beanscli::resolve_beans_bin(None).is_none() {
+                eprintln!("skipping: `beans` not installed");
+                return;
+            }
+        };
+    }
+
     use super::*;
     use std::fs;
     use std::path::PathBuf;
@@ -667,70 +554,28 @@ mod tests {
         }
     }
 
-    // ── title_to_slug tests ──────────────────────────────────────────────────
-
-    #[test]
-    fn test_title_to_slug_basic() {
-        assert_eq!(title_to_slug("Hello World"), "hello-world");
-    }
-
-    #[test]
-    fn test_title_to_slug_colon_prefix() {
-        // "FEAT: add a file browser" → "feat-add-a-file-browser"
-        assert_eq!(title_to_slug("FEAT: add a file browser"), "feat-add-a-file-browser");
-        assert_eq!(title_to_slug("FIX: move the button"), "fix-move-the-button");
-    }
-
-    #[test]
-    fn test_title_to_slug_special_chars() {
-        // Special characters become dashes, consecutive dashes collapse.
-        assert_eq!(title_to_slug("hello--world"), "hello-world");
-        assert_eq!(title_to_slug("  spaces  "), "spaces");
-        assert_eq!(title_to_slug("a/b\\c"), "a-b-c");
-    }
-
-    #[test]
-    fn test_title_to_slug_empty() {
-        assert_eq!(title_to_slug(""), "bean");
-        assert_eq!(title_to_slug(":::"), "bean");
-    }
 
     // ── beanstalk-zc3m: generate_id_format ───────────────────────────────────
-
-    #[test]
-    fn test_generate_id_format() {
-        // random_suffix() returns a non-empty string of exactly 4 base-36 chars.
-        let suffix = random_suffix();
-        assert!(!suffix.is_empty(), "random_suffix should not be empty");
-        assert_eq!(suffix.len(), 4, "random_suffix should be 4 characters long");
-        // All characters must be alphanumeric (base-36).
-        assert!(
-            suffix.chars().all(|c| c.is_ascii_alphanumeric()),
-            "random_suffix chars must be alphanumeric, got: {}",
-            suffix
-        );
-    }
 
     // ── beanstalk-xq94: create_bean tests ────────────────────────────────────
 
     #[test]
     fn test_create_bean_writes_file() {
+        require_beans!();
         let tmp = TempDir::new("create_bean_writes");
         let project_path = tmp.path().to_string_lossy().to_string();
 
         let result = create_bean(
             project_path.clone(),
             "Test Bean".to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("some body".to_string()),
             None,
-            None,
-        );
+            None);
 
         assert!(result.is_ok(), "create_bean should succeed: {:?}", result);
         let bean = result.unwrap();
@@ -747,22 +592,21 @@ mod tests {
 
     #[test]
     fn test_create_bean_file_has_frontmatter() {
+        require_beans!();
         let tmp = TempDir::new("create_bean_frontmatter");
         let project_path = tmp.path().to_string_lossy().to_string();
 
         let result = create_bean(
             project_path.clone(),
             "Frontmatter Bean".to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        );
+            None);
 
         assert!(result.is_ok(), "create_bean should succeed: {:?}", result);
         let bean = result.unwrap();
@@ -770,11 +614,290 @@ mod tests {
         let content = fs::read_to_string(&bean.file_path).expect("read bean file");
 
         assert!(content.starts_with("---\n"), "file should start with '---' frontmatter delimiter");
-        // Title is double-quoted for YAML safety.
-        assert!(content.contains("\"Frontmatter Bean\""), "file should contain the quoted title in frontmatter");
+        // How the title is quoted is `beans`' business now that it owns the
+        // writer, so assert the value round-trips rather than its YAML style.
+        assert_eq!(bean.title, "Frontmatter Bean", "title should round-trip");
+        assert!(content.contains("Frontmatter Bean"), "file should contain the title");
         assert!(content.contains("---"), "file should have closing '---' delimiter");
         // Filename format: {id}--{slug}.md
         assert!(bean.file_path.contains("--frontmatter-bean"), "filename should contain slug from title");
+    }
+
+    // ── beanstalk-dg1m: writes go through the `beans` CLI ────────────────────
+
+    /// The regression this milestone exists for.
+    ///
+    /// Beanstalk used to build bean files from its own `format!` template, which
+    /// wrote the id as an `id:` key while the CLI writes it as a `# <id>` comment,
+    /// quoted titles the CLI leaves bare, and materialised `tags: []`. 30 of 31
+    /// files in this repo used the comment form; the single file Beanstalk had
+    /// ever saved was the only one with an `id:` key.
+    #[test]
+    fn test_create_bean_writes_the_cli_frontmatter_format() {
+        require_beans!();
+        let tmp = TempDir::new("cli_format_create");
+        let project_path = tmp.path().to_string_lossy().to_string();
+
+        let bean = create_bean(
+            project_path,
+            "Format Bean".to_string(),
+            "todo".to_string(),
+            "task".to_string(),
+            None,
+            Some(vec![]),
+            None,
+            Some("".to_string()),
+            None,
+            None,
+        )
+        .expect("create_bean should succeed");
+
+        let content = fs::read_to_string(&bean.file_path).expect("read bean file");
+
+        assert!(
+            content.contains(&format!("# {}", bean.id)),
+            "id must be written as a YAML comment, as the CLI does; got:\n{content}"
+        );
+        assert!(
+            !content.contains(&format!("id: {}", bean.id)),
+            "id must NOT be written as an `id:` key -- that was the template's signature;\ngot:\n{content}"
+        );
+        assert!(
+            !content.contains("tags: []"),
+            "an empty tags key must not be materialised; got:\n{content}"
+        );
+    }
+
+    #[test]
+    fn test_update_bean_preserves_the_cli_id_comment() {
+        require_beans!();
+        let tmp = TempDir::new("cli_format_update");
+        let project_path = tmp.path().to_string_lossy().to_string();
+
+        let bean = create_bean(
+            project_path.clone(),
+            "Round Trip".to_string(),
+            "todo".to_string(),
+            "task".to_string(),
+            None,
+            Some(vec![]),
+            None,
+            Some("body".to_string()),
+            None,
+            None,
+        )
+        .expect("create_bean should succeed");
+
+        let updated = update_bean(
+            project_path,
+            bean.id.clone(),
+            None,
+            Some("in-progress".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("update_bean should succeed");
+
+        let content = fs::read_to_string(&updated.file_path).expect("read bean file");
+        assert!(
+            content.contains(&format!("# {}", bean.id)),
+            "a save must not rewrite the id comment into an `id:` key; got:\n{content}"
+        );
+        assert!(!content.contains(&format!("id: {}", bean.id)));
+        assert_eq!(updated.status, "in-progress");
+        assert_eq!(updated.body.trim(), "body", "body must survive a frontmatter-only update");
+    }
+
+    /// `beans` validates against project config; the old template writer did not.
+    #[test]
+    fn test_invalid_status_is_rejected_rather_than_written() {
+        require_beans!();
+        let tmp = TempDir::new("cli_validates");
+        let project_path = tmp.path().to_string_lossy().to_string();
+
+        let result = create_bean(
+            project_path,
+            "Bad Status".to_string(),
+            "open".to_string(), // not a beans status
+            "task".to_string(),
+            None,
+            Some(vec![]),
+            None,
+            Some("".to_string()),
+            None,
+            None,
+        );
+
+        let err = result.expect_err("an invalid status must not be written");
+        assert!(
+            err.code.contains("STATUS") || err.code == "VALIDATION_ERROR",
+            "expected a status validation code, got {err:?}"
+        );
+    }
+
+    /// Touch has no CLI equivalent (a flagless update is refused), so it is
+    /// expressed as re-setting the current status.
+    #[test]
+    fn test_update_with_no_changes_behaves_as_touch() {
+        require_beans!();
+        let tmp = TempDir::new("cli_touch");
+        let project_path = tmp.path().to_string_lossy().to_string();
+
+        let bean = create_bean(
+            project_path.clone(),
+            "Touchable".to_string(),
+            "todo".to_string(),
+            "task".to_string(),
+            None,
+            Some(vec![]),
+            None,
+            Some("".to_string()),
+            None,
+            None,
+        )
+        .expect("create_bean should succeed");
+
+        let touched = update_bean(
+            project_path,
+            bean.id.clone(),
+            None, None, None, None, None, None, None, None,
+            None,
+        )
+        .expect("a no-change update must succeed rather than erroring");
+
+        assert_eq!(touched.status, bean.status, "status must be unchanged");
+        assert_eq!(touched.title, bean.title, "title must be unchanged");
+    }
+
+    // ── beanstalk-ep8j: lost-update guard ────────────────────────────────────
+
+    /// Helper: a bean with a known body, ready to be raced.
+    fn seed_body_bean(project_path: &str, body: &str) -> Bean {
+        create_bean(
+            project_path.to_string(),
+            "Raceable".to_string(),
+            "todo".to_string(),
+            "task".to_string(),
+            None,
+            Some(vec![]),
+            None,
+            Some(body.to_string()),
+            None,
+            None,
+        )
+        .expect("create_bean should succeed")
+    }
+
+    #[test]
+    fn test_body_write_succeeds_when_disk_still_matches() {
+        require_beans!();
+        let tmp = TempDir::new("guard_clean");
+        let project_path = tmp.path().to_string_lossy().to_string();
+        let bean = seed_body_bean(&project_path, "Base body.");
+
+        let updated = update_bean(
+            project_path,
+            bean.id.clone(),
+            None, None, None,
+            Some("My edit.".to_string()),
+            None, None, None, None,
+            Some("Base body.".to_string()),
+        )
+        .expect("an unchanged base must not be treated as a conflict");
+
+        assert_eq!(updated.body.trim(), "My edit.");
+    }
+
+    #[test]
+    fn test_body_write_is_refused_when_disk_changed_underneath() {
+        require_beans!();
+        let tmp = TempDir::new("guard_conflict");
+        let project_path = tmp.path().to_string_lossy().to_string();
+        let bean = seed_body_bean(&project_path, "Base body.");
+
+        // Someone else — an agent running `beans update --body-append`, say —
+        // changes the body while the edit is open.
+        update_bean(
+            project_path.clone(),
+            bean.id.clone(),
+            None, None, None,
+            Some("Base body.\n\nAppended by an agent.".to_string()),
+            None, None, None, None,
+            None,
+        )
+        .expect("the concurrent write should succeed");
+
+        let err = update_bean(
+            project_path.clone(),
+            bean.id.clone(),
+            None, None, None,
+            Some("My edit.".to_string()),
+            None, None, None, None,
+            Some("Base body.".to_string()),
+        )
+        .expect_err("a stale base must be refused");
+
+        assert_eq!(err.code, "CONFLICT", "must be distinguishable from other failures");
+
+        // Nothing was overwritten: the agent's text is still there.
+        let on_disk = get_bean(project_path, bean.id).expect("bean should still exist");
+        assert!(
+            on_disk.body.contains("Appended by an agent."),
+            "the concurrent change must survive; got: {:?}",
+            on_disk.body
+        );
+        assert!(!on_disk.body.contains("My edit."), "the refused edit must not be written");
+    }
+
+    #[test]
+    fn test_guard_is_skipped_when_no_base_is_supplied() {
+        require_beans!();
+        // Writes that do not touch the body (status cycling, Touch) pass no base
+        // and must not be blocked by one.
+        let tmp = TempDir::new("guard_absent");
+        let project_path = tmp.path().to_string_lossy().to_string();
+        let bean = seed_body_bean(&project_path, "Base body.");
+
+        let updated = update_bean(
+            project_path,
+            bean.id.clone(),
+            None,
+            Some("in-progress".to_string()),
+            None, None, None, None, None, None,
+            None,
+        )
+        .expect("a status-only write needs no base");
+
+        assert_eq!(updated.status, "in-progress");
+        assert_eq!(updated.body.trim(), "Base body.", "body must be untouched");
+    }
+
+    #[test]
+    fn test_guard_tolerates_trailing_newline_differences() {
+        require_beans!();
+        // `beans` normalises the trailing newline on a body, so a base captured
+        // from a parsed bean can differ from what is written back by exactly
+        // that. Treating it as a conflict would refuse every second save.
+        let tmp = TempDir::new("guard_trailing");
+        let project_path = tmp.path().to_string_lossy().to_string();
+        let bean = seed_body_bean(&project_path, "Base body.");
+
+        let updated = update_bean(
+            project_path,
+            bean.id.clone(),
+            None, None, None,
+            Some("Edited.".to_string()),
+            None, None, None, None,
+            Some("Base body.\n\n".to_string()),
+        )
+        .expect("a trailing-newline difference must not be a conflict");
+
+        assert_eq!(updated.body.trim(), "Edited.");
     }
 
     // ── beanstalk-7kwy: get_beans / get_bean tests ───────────────────────────
@@ -967,21 +1090,20 @@ mod tests {
 
     #[test]
     fn test_search_beans_title_match() {
+        require_beans!();
         let tmp = TempDir::new("search_title");
 
         let result = create_bean(
             tmp.path().to_string_lossy().to_string(),
             "Unique Title Query".to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        );
+            None);
         assert!(result.is_ok());
 
         let search_result = search_beans(
@@ -1000,21 +1122,20 @@ mod tests {
 
     #[test]
     fn test_search_beans_case_insensitive() {
+        require_beans!();
         let tmp = TempDir::new("search_case");
 
         create_bean(
             tmp.path().to_string_lossy().to_string(),
             "lowercase title here".to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create_bean");
 
         let result = search_beans(
@@ -1032,21 +1153,20 @@ mod tests {
 
     #[test]
     fn test_search_beans_status_filter() {
+        require_beans!();
         let tmp = TempDir::new("search_status");
 
         create_bean(
             tmp.path().to_string_lossy().to_string(),
             "Open Bean".to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create open bean");
 
         // Small sleep to ensure different random suffix.
@@ -1055,86 +1175,82 @@ mod tests {
         create_bean(
             tmp.path().to_string_lossy().to_string(),
             "Done Bean".to_string(),
-            "done".to_string(),
+            "completed".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create done bean");
 
         // Filter to only "done" status.
         let result = search_beans(
             tmp.path().to_string_lossy().to_string(),
             "".to_string(),
-            Some("done".to_string()),
+            Some("completed".to_string()),
             None,
             None,
         );
 
         assert!(result.is_ok());
         let beans = result.unwrap();
-        assert_eq!(beans.len(), 1, "status filter should return only 'done' beans");
-        assert_eq!(beans[0].status, "done");
+        assert_eq!(beans.len(), 1, "status filter should return only completed beans");
+        assert_eq!(beans[0].status, "completed");
     }
 
     // ── beanstalk-ulq3: update_bean / update_bean_status tests ───────────────
 
     #[test]
     fn test_update_bean_status() {
+        require_beans!();
         let tmp = TempDir::new("update_status");
 
         let bean = create_bean(
             tmp.path().to_string_lossy().to_string(),
             "Status Bean".to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create bean");
 
         let result = update_bean_status(
             tmp.path().to_string_lossy().to_string(),
             bean.id.clone(),
-            "done".to_string(),
+            "completed".to_string(),
         );
 
         assert!(result.is_ok(), "update_bean_status should succeed: {:?}", result);
         let updated = result.unwrap();
-        assert_eq!(updated.status, "done", "status should be updated to 'done'");
+        assert_eq!(updated.status, "completed", "status should be updated");
 
         // Verify the file on disk was updated.
         let file_content = fs::read_to_string(&updated.file_path).expect("read file");
-        assert!(file_content.contains("status: done"), "file on disk should reflect new status");
+        assert!(file_content.contains("status: completed"), "file on disk should reflect new status");
     }
 
     #[test]
     fn test_update_bean_title() {
+        require_beans!();
         let tmp = TempDir::new("update_title");
 
         let bean = create_bean(
             tmp.path().to_string_lossy().to_string(),
             "Original Title".to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create bean");
 
         let result = update_bean(
@@ -1156,12 +1272,13 @@ mod tests {
         assert_eq!(updated.title, "Updated Title", "title should be updated");
 
         let file_content = fs::read_to_string(&updated.file_path).expect("read file");
-        // Title is double-quoted for YAML safety.
-        assert!(file_content.contains("\"Updated Title\""), "file should contain quoted new title");
+        // Quoting style belongs to `beans`; assert the value, not the syntax.
+        assert!(file_content.contains("Updated Title"), "file should contain the new title");
     }
 
     #[test]
     fn test_update_bean_not_found() {
+        require_beans!();
         let tmp = TempDir::new("update_not_found");
         fs::create_dir_all(tmp.path().join(".beans")).unwrap();
 
@@ -1184,26 +1301,40 @@ mod tests {
 
     #[test]
     fn test_update_bean_clears_parent_with_empty_string() {
+        require_beans!();
         // Regression for beanstalk-du57: removing a parent via UI edit must persist.
         // Frontend sends "" to mean "clear"; backend must drop the parent field.
         let tmp = TempDir::new("update_clear_parent");
         let project_path = tmp.path().to_string_lossy().to_string();
 
-        let bean = create_bean(
+        // `beans` validates that a parent exists -- the old template writer did
+        // not -- so the parent has to be real.
+        let parent = create_bean(
             project_path.clone(),
-            "Child Bean".to_string(),
-            "open".to_string(),
-            "task".to_string(),
-            Some("parent-abc".to_string()),
-            Some(vec![]),
+            "Parent Bean".to_string(),
+            "todo".to_string(),
+            "epic".to_string(),
             None,
+            Some(vec![]),
             None,
             Some("".to_string()),
             None,
+            None)
+        .expect("parent should be creatable");
+
+        let bean = create_bean(
+            project_path.clone(),
+            "Child Bean".to_string(),
+            "todo".to_string(),
+            "task".to_string(),
+            Some(parent.id.clone()),
+            Some(vec![]),
             None,
-        )
+            Some("".to_string()),
+            None,
+            None)
         .expect("create_bean should succeed");
-        assert_eq!(bean.parent.as_deref(), Some("parent-abc"));
+        assert_eq!(bean.parent.as_deref(), Some(parent.id.as_str()));
 
         let updated = update_bean(
             project_path.clone(),
@@ -1212,8 +1343,8 @@ mod tests {
             None,
             None,
             None,
-            None,
             Some("".to_string()),
+            None,
             None,
             None,
             None,
@@ -1225,81 +1356,12 @@ mod tests {
         assert!(!on_disk.contains("parent:"), "parent line should be absent from file");
     }
 
-    // ── yaml_quote_str tests (beanstalk-e5ce fix) ────────────────────────────
-
-    #[test]
-    fn test_yaml_quote_str_plain() {
-        // Simple titles need no special treatment but are still double-quoted.
-        let result = yaml_quote_str("My Bean Title");
-        assert_eq!(result, "\"My Bean Title\"");
-    }
-
-    #[test]
-    fn test_yaml_quote_str_with_hash() {
-        // A hash preceded by a space is a YAML comment marker — must be quoted.
-        let result = yaml_quote_str("Fix #123 issue");
-        assert_eq!(result, "\"Fix #123 issue\"");
-        // Verify serde_yaml can parse the output as the original string.
-        let yaml = format!("title: {}", result);
-        let map: std::collections::HashMap<String, serde_yaml::Value> =
-            serde_yaml::from_str(&yaml).expect("must parse");
-        assert_eq!(map["title"].as_str(), Some("Fix #123 issue"));
-    }
-
-    #[test]
-    fn test_yaml_quote_str_leading_hash() {
-        // Title that starts with '#' — without quoting, serde_yaml sees a comment.
-        let result = yaml_quote_str("#123: boot crash");
-        let yaml = format!("title: {}", result);
-        let map: std::collections::HashMap<String, serde_yaml::Value> =
-            serde_yaml::from_str(&yaml).expect("must parse");
-        assert_eq!(map["title"].as_str(), Some("#123: boot crash"));
-    }
-
-    #[test]
-    fn test_yaml_quote_str_with_brackets() {
-        // '[' at start of a YAML value begins a flow sequence — must be quoted.
-        let result = yaml_quote_str("[Bug] Something broke");
-        let yaml = format!("title: {}", result);
-        let map: std::collections::HashMap<String, serde_yaml::Value> =
-            serde_yaml::from_str(&yaml).expect("must parse");
-        assert_eq!(map["title"].as_str(), Some("[Bug] Something broke"));
-    }
-
-    #[test]
-    fn test_yaml_quote_str_with_colon() {
-        // Colons in values are legal as unquoted scalars, but quoting is safe.
-        let result = yaml_quote_str("Fix: status update");
-        let yaml = format!("title: {}", result);
-        let map: std::collections::HashMap<String, serde_yaml::Value> =
-            serde_yaml::from_str(&yaml).expect("must parse");
-        assert_eq!(map["title"].as_str(), Some("Fix: status update"));
-    }
-
-    #[test]
-    fn test_yaml_quote_str_with_double_quote() {
-        // Internal double-quotes must be escaped.
-        let result = yaml_quote_str("She said \"hello\"");
-        let yaml = format!("title: {}", result);
-        let map: std::collections::HashMap<String, serde_yaml::Value> =
-            serde_yaml::from_str(&yaml).expect("must parse");
-        assert_eq!(map["title"].as_str(), Some("She said \"hello\""));
-    }
-
-    #[test]
-    fn test_yaml_quote_str_with_backslash() {
-        // Backslashes must be escaped.
-        let result = yaml_quote_str("path\\to\\file");
-        let yaml = format!("title: {}", result);
-        let map: std::collections::HashMap<String, serde_yaml::Value> =
-            serde_yaml::from_str(&yaml).expect("must parse");
-        assert_eq!(map["title"].as_str(), Some("path\\to\\file"));
-    }
 
     // ── title round-trip tests ────────────────────────────────────────────────
 
     #[test]
     fn test_create_bean_title_with_special_chars_roundtrips() {
+        require_beans!();
         // A title with '#' and '[' should survive a create → parse round-trip.
         let tmp = TempDir::new("title_special_create");
         let project_path = tmp.path().to_string_lossy().to_string();
@@ -1308,16 +1370,14 @@ mod tests {
         let bean = create_bean(
             project_path.clone(),
             tricky_title.to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create_bean should succeed");
 
         assert_eq!(bean.title, tricky_title, "title must survive create round-trip");
@@ -1329,6 +1389,7 @@ mod tests {
 
     #[test]
     fn test_update_bean_title_with_special_chars_roundtrips() {
+        require_beans!();
         // A title with YAML-special characters should survive an update → parse round-trip.
         let tmp = TempDir::new("title_special_update");
         let project_path = tmp.path().to_string_lossy().to_string();
@@ -1339,16 +1400,14 @@ mod tests {
         let bean = create_bean(
             project_path.clone(),
             original_title.to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create_bean should succeed");
 
         let updated = update_bean(
@@ -1374,6 +1433,7 @@ mod tests {
 
     #[test]
     fn test_update_bean_status_preserves_special_char_title() {
+        require_beans!();
         // update_bean_status (None title) must preserve a title with special chars.
         let tmp = TempDir::new("status_preserves_title");
         let project_path = tmp.path().to_string_lossy().to_string();
@@ -1383,37 +1443,36 @@ mod tests {
         let bean = create_bean(
             project_path.clone(),
             tricky_title.to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create_bean should succeed");
 
         let updated = update_bean_status(
             project_path.clone(),
             bean.id.clone(),
-            "done".to_string(),
+            "completed".to_string(),
         )
         .expect("update_bean_status should succeed");
 
-        assert_eq!(updated.status, "done", "status must be updated");
+        assert_eq!(updated.status, "completed", "status must be updated");
         assert_eq!(updated.title, tricky_title, "title must be preserved after status change");
 
         let on_disk = get_bean(project_path, bean.id).expect("get_bean should find updated bean");
         assert_eq!(on_disk.title, tricky_title, "title on disk must be preserved");
-        assert_eq!(on_disk.status, "done", "status on disk must be 'done'");
+        assert_eq!(on_disk.status, "completed", "status on disk must be updated");
     }
 
     // ── priority round-trip tests (beanstalk-xgaq fix) ───────────────────────
 
     #[test]
     fn test_create_bean_with_priority_roundtrips() {
+        require_beans!();
         // A priority value passed to create_bean should appear in the written file
         // and be returned in the Bean struct (round-trip).
         let tmp = TempDir::new("create_priority");
@@ -1422,16 +1481,14 @@ mod tests {
         let bean = create_bean(
             project_path.clone(),
             "Priority Bean".to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
-            None,
             Some("high".to_string()),
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create_bean should succeed");
 
         // Priority must be returned in the Bean struct.
@@ -1460,6 +1517,7 @@ mod tests {
 
     #[test]
     fn test_create_bean_without_priority_omits_field() {
+        require_beans!();
         // When priority is None, the frontmatter must not contain a priority line.
         let tmp = TempDir::new("create_no_priority");
         let project_path = tmp.path().to_string_lossy().to_string();
@@ -1467,16 +1525,14 @@ mod tests {
         let bean = create_bean(
             project_path.clone(),
             "No Priority Bean".to_string(),
-            "open".to_string(),
+            "todo".to_string(),
             "task".to_string(),
             None,
             Some(vec![]),
             None,
-            None,
             Some("".to_string()),
             None,
-            None,
-        )
+            None)
         .expect("create_bean should succeed");
 
         let content = fs::read_to_string(&bean.file_path).expect("read bean file");

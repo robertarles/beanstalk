@@ -45,10 +45,11 @@ describe('CreateBeanForm', () => {
     expect(screen.getByText(/Type/i)).toBeInTheDocument()
     // Tags label
     expect(screen.getByText(/Tags/i)).toBeInTheDocument()
-    // Assignee label
-    expect(screen.getByText(/Assignee/i)).toBeInTheDocument()
+    // No Assignee field: `beans` has no assignee and owns the writer
+    // (beanstalk-dg1m), so an input here could not persist.
+    expect(screen.queryByText(/Assignee/i)).not.toBeInTheDocument()
     // Description / body textarea
-    expect(screen.getByPlaceholderText('Optional description...')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Optional description/)).toBeInTheDocument()
   })
 
   it('shows validation error when title is empty on submit', async () => {

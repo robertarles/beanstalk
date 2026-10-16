@@ -163,7 +163,7 @@ describe('BeanDetail', () => {
     )
   })
 
-  it('save preserves original status when status is not changed', () => {
+  it('sends only the changed field, leaving the rest to be kept from disk (beanstalk-c57u)', () => {
     const onSave = vi.fn()
     render(<BeanDetail {...defaultProps} onSave={onSave} />)
     fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
@@ -174,12 +174,20 @@ describe('BeanDetail', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Save$/i }))
 
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'New Title',
-        status: mockBean.status, // original status preserved
-      })
-    )
+    // An unchanged field is omitted rather than restated from a possibly stale
+    // copy -- restating is how a status change came to blank a title
+    // (beanstalk-e5ce). Omitted means the backend keeps what is on disk.
+    expect(onSave).toHaveBeenCalledWith({ title: 'New Title' })
+  })
+
+  it('writes nothing when the form is saved unchanged (beanstalk-c57u)', () => {
+    const onSave = vi.fn()
+    render(<BeanDetail {...defaultProps} onSave={onSave} />)
+    fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }))
+
+    // Touch is the deliberate way to bump updated_at; Save must not do it.
+    expect(onSave).not.toHaveBeenCalled()
   })
 
   // ── Link rendering ──────────────────────────────────────────────────────────
@@ -314,5 +322,227 @@ describe('BeanDetail markdown rendering', () => {
     render(<BeanDetail {...defaultProps} bean={bean} />)
     expect(screen.getByRole('heading', { level: 1, name: 'Title' })).toBeInTheDocument()
     expect(screen.getByText('docs')).toBeInTheDocument()
+  })
+})
+
+describe('BeanDetail relation badges (beanstalk-3wh2)', () => {
+  const related: Bean = {
+    ...mockBean,
+    blocking: ['bean-blk1', 'bean-blk2'],
+    blocked_by: ['bean-dep1'],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders every Blocking and Blocked By id as a button when onSelectBean is given', () => {
+    render(<BeanDetail {...defaultProps} bean={related} onSelectBean={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'bean-blk1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'bean-blk2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'bean-dep1' })).toBeInTheDocument()
+  })
+
+  it('selects the clicked relation, including ones past the first', () => {
+    const onSelectBean = vi.fn()
+    render(<BeanDetail {...defaultProps} bean={related} onSelectBean={onSelectBean} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'bean-blk2' }))
+    expect(onSelectBean).toHaveBeenCalledWith('bean-blk2')
+
+    fireEvent.click(screen.getByRole('button', { name: 'bean-dep1' }))
+    expect(onSelectBean).toHaveBeenCalledWith('bean-dep1')
+  })
+
+  it('is keyboard reachable', () => {
+    const onSelectBean = vi.fn()
+    render(<BeanDetail {...defaultProps} bean={related} onSelectBean={onSelectBean} />)
+    const badge = screen.getByRole('button', { name: 'bean-blk1' })
+    badge.focus()
+    expect(badge).toHaveFocus()
+  })
+
+  it('stays inert text when no onSelectBean is provided', () => {
+    render(<BeanDetail {...defaultProps} bean={related} />)
+    expect(screen.queryByRole('button', { name: 'bean-blk1' })).not.toBeInTheDocument()
+    expect(screen.getByText('bean-blk1')).toBeInTheDocument()
+  })
+})
+
+describe('BeanDetail write gating (beanstalk-dg1m)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('disables Edit and Touch when the beans CLI is missing', () => {
+    render(
+      <BeanDetail {...defaultProps} onTouch={vi.fn()} beansAvailable={false} beansError="`beans` not found on PATH" />
+    )
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Touch' })).toBeDisabled()
+  })
+
+  it('explains why, on the disabled control', () => {
+    render(<BeanDetail {...defaultProps} beansAvailable={false} beansError="`beans` not found on PATH" />)
+    expect(screen.getByRole('button', { name: 'Edit' })).toHaveAttribute(
+      'title',
+      '`beans` not found on PATH'
+    )
+  })
+
+  it('falls back to a general explanation when no reason is given', () => {
+    render(<BeanDetail {...defaultProps} beansAvailable={false} />)
+    const title = screen.getByRole('button', { name: 'Edit' }).getAttribute('title') ?? ''
+    expect(title).toContain('beans')
+    expect(title).toContain('external editor')
+  })
+
+  it('leaves the external editor button enabled — it writes nothing through Beanstalk', () => {
+    render(<BeanDetail {...defaultProps} beansAvailable={false} />)
+    // The pane must never be a dead end: this is the escape hatch.
+    expect(screen.getByRole('button', { name: /Edit ↗/ })).toBeEnabled()
+  })
+
+  it('leaves everything enabled when the CLI is present', () => {
+    render(<BeanDetail {...defaultProps} onTouch={vi.fn()} beansAvailable={true} />)
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Touch' })).toBeEnabled()
+  })
+})
+
+describe('BeanDetail conflict handling (beanstalk-ep8j)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const bodyBean: Bean = { ...mockBean, body: 'Base body.' }
+
+  it('sends the base body alongside a body change', async () => {
+    const onSave = vi.fn()
+    render(<BeanDetail {...defaultProps} bean={bodyBean} onSave={onSave} />)
+    fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
+    fireEvent.change(screen.getByPlaceholderText('Bean title'), { target: { value: 'T2' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Save$/i })) })
+
+    // A title-only change carries no base: the body is not being replaced.
+    expect(onSave).toHaveBeenCalledWith({ title: 'T2' })
+  })
+
+  it('keeps the typed text and explains when the save is refused', async () => {
+    const onSave = vi.fn().mockRejectedValue({ code: 'CONFLICT', message: 'It changed on disk.' })
+    render(<BeanDetail {...defaultProps} bean={bodyBean} onSave={onSave} />)
+    fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
+    const titleInput = screen.getByPlaceholderText('Bean title')
+    fireEvent.change(titleInput, { target: { value: 'My careful edit' } })
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Save$/i })) })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('It changed on disk.')
+    // The hard requirement: edit mode stays open and the text survives.
+    expect(screen.getByPlaceholderText('Bean title')).toHaveValue('My careful edit')
+  })
+
+  it('stays in edit mode on any other failure too, so nothing is lost', async () => {
+    const onSave = vi.fn().mockRejectedValue({ code: 'BEANS_FAILED', message: 'disk full' })
+    render(<BeanDetail {...defaultProps} bean={bodyBean} onSave={onSave} />)
+    fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
+    fireEvent.change(screen.getByPlaceholderText('Bean title'), { target: { value: 'Draft' } })
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Save$/i })) })
+
+    expect(screen.getByPlaceholderText('Bean title')).toHaveValue('Draft')
+    // Only a conflict gets the inline explanation; others are toasted by App.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('warns when the bean changes on disk mid-edit', () => {
+    const { rerender } = render(<BeanDetail {...defaultProps} bean={bodyBean} onSave={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    // Same bean id, new body: the watcher reloaded it underneath the editor.
+    rerender(<BeanDetail {...defaultProps} bean={{ ...bodyBean, body: 'Appended by an agent.' }} onSave={vi.fn()} />)
+    expect(screen.getByRole('status')).toHaveTextContent(/changed on disk/i)
+  })
+
+  it('closes cleanly on a successful save', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    render(<BeanDetail {...defaultProps} bean={bodyBean} onSave={onSave} />)
+    fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
+    fireEvent.change(screen.getByPlaceholderText('Bean title'), { target: { value: 'Fine' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Save$/i })) })
+
+    expect(screen.queryByPlaceholderText('Bean title')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('BeanDetail inline body editor (beanstalk-crjm)', () => {
+  const bodyBean: Bean = { ...mockBean, body: 'Original body.' }
+  const allBeans: Bean[] = [bodyBean, { ...mockBean, id: 'bean-target', title: 'Target Bean' }]
+
+  beforeEach(() => vi.clearAllMocks())
+
+  function openEditor(props: Record<string, unknown> = {}) {
+    render(<BeanDetail {...defaultProps} bean={bodyBean} allBeans={allBeans} onSave={vi.fn()} {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
+    return screen.getByPlaceholderText(/Markdown body/) as HTMLTextAreaElement
+  }
+
+  it('offers the body for editing, preloaded with the current value', () => {
+    expect(openEditor()).toHaveValue('Original body.')
+  })
+
+  it('keeps the external editor button available beside it', () => {
+    openEditor()
+    // Deliberately not replaced by the inline editor.
+    expect(screen.getByRole('button', { name: /Editor ↗/ })).toBeEnabled()
+  })
+
+  it('sends the body and its base when it is changed', async () => {
+    const onSave = vi.fn()
+    const area = openEditor({ onSave })
+    fireEvent.change(area, { target: { value: 'Rewritten body.' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Save$/i })) })
+
+    expect(onSave).toHaveBeenCalledWith({
+      body: 'Rewritten body.',
+      expectBody: 'Original body.',
+    })
+  })
+
+  it('does not send the body when only other fields changed', async () => {
+    const onSave = vi.fn()
+    openEditor({ onSave })
+    fireEvent.change(screen.getByPlaceholderText('Bean title'), { target: { value: 'New' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Save$/i })) })
+
+    expect(onSave).toHaveBeenCalledWith({ title: 'New' })
+  })
+
+  it('offers the wikilink picker on [[ inside the body', () => {
+    const area = openEditor()
+    fireEvent.change(area, { target: { value: 'See [[Target', selectionStart: 12 } })
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    expect(screen.getByText('Target Bean')).toBeInTheDocument()
+  })
+
+  it('confirms before discarding a modified body', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const area = openEditor()
+    fireEvent.change(area, { target: { value: 'Work in progress.' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }))
+
+    expect(confirmSpy).toHaveBeenCalled()
+    // Declining keeps the draft and stays in edit mode.
+    expect(screen.getByPlaceholderText(/Markdown body/)).toHaveValue('Work in progress.')
+    confirmSpy.mockRestore()
+  })
+
+  it('cancels without asking when nothing was changed', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    openEditor()
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }))
+
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(screen.queryByPlaceholderText(/Markdown body/)).not.toBeInTheDocument()
+    confirmSpy.mockRestore()
   })
 })

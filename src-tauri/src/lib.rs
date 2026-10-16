@@ -7,6 +7,7 @@ pub mod config; // Application configuration persistence
 pub mod watcher;   // File system watcher for live bean updates
 pub mod scripts;   // User-provided bean action scripts
 pub mod appearance; // System dark-mode / text-scaling detection (Linux)
+pub mod beanscli;  // Delegated bean writes via the `beans` binary
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,6 +32,7 @@ pub fn run() {
             config::commands::remove_project,
             config::commands::set_active_project,
             config::commands::update_config,
+            config::commands::get_project_prefixes,
             commands::get_beans,
             commands::get_bean,
             commands::create_bean,
@@ -44,6 +46,7 @@ pub fn run() {
             watcher::start_watching,
             watcher::stop_watching,
             appearance::get_system_appearance,
+            beanscli::beans_cli_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

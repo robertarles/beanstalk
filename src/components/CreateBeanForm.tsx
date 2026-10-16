@@ -1,14 +1,17 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Bean } from '../types/beans';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import type { Bean, PrefixMap } from '../types/beans';
 import { createBean } from '../lib/tauri';
 import { ParentBeanSelect } from './ParentBeanSelect';
 import { RelatedBeansSelect } from './RelatedBeansSelect';
+import { BodyEditor } from './BodyEditor';
 
 interface CreateBeanFormProps {
   projectPath: string;
   allBeans: Bean[];
   onCreated: (bean: Bean) => void;
   onCancel: () => void;
+  /** Prefix -> project routing, used to offer beans from other projects. */
+  prefixMap?: PrefixMap;
   /** Register an Escape handler with the keyboard nav system. Priority 20. */
   registerEscapeHandler?: (priority: number, handler: () => boolean) => () => void;
 }
@@ -22,8 +25,14 @@ export function CreateBeanForm({
   allBeans,
   onCreated,
   onCancel,
+  prefixMap,
   registerEscapeHandler,
 }: CreateBeanFormProps) {
+  /** Configured projects other than this one, for the cross-project pickers. */
+  const otherProjects = useMemo(
+    () => (prefixMap?.entries ?? []).filter((p) => p.path !== projectPath),
+    [prefixMap, projectPath]
+  );
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState('todo');
   const [beanType, setBeanType] = useState('task');
@@ -32,7 +41,6 @@ export function CreateBeanForm({
   const [blocking, setBlocking] = useState<string[]>([]);
   const [blockedBy, setBlockedBy] = useState<string[]>([]);
   const [tags, setTags] = useState('');
-  const [assignee, setAssignee] = useState('');
   const [body, setBody] = useState('');
   const [titleError, setTitleError] = useState('');
   const [submitError, setSubmitError] = useState('');
@@ -92,7 +100,6 @@ export function CreateBeanForm({
           priority: priority || undefined,
           parent: parentId ?? undefined,
           tags: tagsArray.length > 0 ? tagsArray : undefined,
-          assignee: assignee.trim() || null,
           body: body.trim() || undefined,
           blocking: blocking.length > 0 ? blocking : undefined,
           blockedBy: blockedBy.length > 0 ? blockedBy : undefined,
@@ -104,7 +111,7 @@ export function CreateBeanForm({
         setIsSubmitting(false);
       }
     },
-    [projectPath, title, status, beanType, priority, parentId, tags, assignee, body, blocking, blockedBy, onCreated]
+    [projectPath, title, status, beanType, priority, parentId, tags, body, blocking, blockedBy, onCreated]
   );
 
   const inputClass =
@@ -233,6 +240,7 @@ export function CreateBeanForm({
             value={blocking}
             onChange={setBlocking}
             placeholder="Add bean this blocks..."
+            otherProjects={otherProjects}
           />
         </div>
 
@@ -244,6 +252,7 @@ export function CreateBeanForm({
             value={blockedBy}
             onChange={setBlockedBy}
             placeholder="Add bean that blocks this..."
+            otherProjects={otherProjects}
           />
         </div>
 
@@ -261,25 +270,21 @@ export function CreateBeanForm({
           />
         </div>
 
-        {/* Assignee */}
-        <div className="flex flex-col gap-1">
-          <label className={labelClass}>Assignee</label>
-          <input
-            type="text"
-            value={assignee}
-            onChange={(e) => setAssignee(e.target.value)}
-            placeholder="username or name"
-            className={inputClass}
-          />
-        </div>
+        {/*
+          No Assignee input: `beans` has no assignee field and owns the writer
+          (beanstalk-dg1m), so it could not persist. The external editor can
+          still set one, and it is shown in view mode where present.
+        */}
 
         {/* Body */}
         <div className="flex flex-col gap-1">
           <label className={labelClass}>Description</label>
-          <textarea
+          <BodyEditor
             value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Optional description..."
+            onChange={setBody}
+            beans={allBeans}
+            otherProjects={otherProjects}
+            placeholder="Optional description... type [[ to link a bean"
             rows={5}
             className={[inputClass, 'resize-y'].join(' ')}
           />

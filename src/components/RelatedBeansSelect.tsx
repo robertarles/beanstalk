@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import type { Bean } from '../types/beans';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import type { Bean, ProjectPrefix } from '../types/beans';
+import { useBeanChoices, type BeanChoice } from '../hooks/useBeanChoices';
+import { BeanChoiceList } from './BeanChoiceList';
 
 interface RelatedBeansSelectProps {
   beans: Bean[];
@@ -7,18 +9,11 @@ interface RelatedBeansSelectProps {
   onChange: (ids: string[]) => void;
   excludeId?: string;
   placeholder?: string;
-}
-
-function flattenBeans(beans: Bean[]): Bean[] {
-  const result: Bean[] = [];
-  function walk(nodes: Bean[]) {
-    for (const node of nodes) {
-      result.push(node);
-      if (node.children.length > 0) walk(node.children);
-    }
-  }
-  walk(beans);
-  return result;
+  /**
+   * Configured projects other than the active one. Supplying them makes the
+   * picker cross-project: their beans are offered once the user searches.
+   */
+  otherProjects?: ProjectPrefix[];
 }
 
 export function RelatedBeansSelect({
@@ -27,30 +22,49 @@ export function RelatedBeansSelect({
   onChange,
   excludeId,
   placeholder = 'Add bean...',
+  otherProjects = [],
 }: RelatedBeansSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const flat = flattenBeans(beans).filter(b => b.id !== excludeId && !value.includes(b.id));
+  const exclude = useMemo(
+    () => (excludeId ? [...value, excludeId] : value),
+    [value, excludeId]
+  );
 
-  const filtered = search.trim()
-    ? flat.filter(b =>
-        b.title.toLowerCase().includes(search.toLowerCase()) ||
-        b.id.toLowerCase().includes(search.toLowerCase())
-      )
-    : flat;
+  const { choices, loading } = useBeanChoices({
+    beans,
+    otherProjects,
+    query: search,
+    active: open,
+    exclude,
+  });
 
-  const handleAdd = useCallback((bean: Bean) => {
-    onChange([...value, bean.id]);
-    setSearch('');
-    setOpen(false);
-  }, [value, onChange]);
+  // Every offerable bean, ignoring the search, so a selected chip can be labelled.
+  const { choices: allChoices } = useBeanChoices({
+    beans,
+    otherProjects,
+    query: '',
+    active: false,
+  });
 
-  const handleRemove = useCallback((id: string) => {
-    onChange(value.filter(v => v !== id));
-  }, [value, onChange]);
+  const handleAdd = useCallback(
+    (id: string) => {
+      onChange([...value, id]);
+      setSearch('');
+      setOpen(false);
+    },
+    [value, onChange]
+  );
+
+  const handleRemove = useCallback(
+    (id: string) => {
+      onChange(value.filter((v) => v !== id));
+    },
+    [value, onChange]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -68,8 +82,18 @@ export function RelatedBeansSelect({
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  const allFlat = flattenBeans(beans);
-  const selectedBeans = value.map(id => allFlat.find(b => b.id === id)).filter(Boolean) as Bean[];
+  /**
+   * The chips for already-selected ids.
+   *
+   * A selected id may not be among the loaded choices — a cross-project relation
+   * read back from frontmatter before that project's beans have been fetched, for
+   * instance. Fall back to showing the raw id rather than dropping the chip, which
+   * would hide a relation that is really still set.
+   */
+  const selectedChoices = useMemo<BeanChoice[]>(
+    () => value.map((id) => allChoices.find((c) => c.id === id) ?? { id, title: id }),
+    [value, allChoices]
+  );
 
   const baseInputClass =
     'w-full text-sm px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -77,19 +101,24 @@ export function RelatedBeansSelect({
   return (
     <div ref={containerRef} className="relative flex flex-col gap-1">
       {/* Selected tags */}
-      {selectedBeans.length > 0 && (
+      {selectedChoices.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {selectedBeans.map(bean => (
+          {selectedChoices.map((choice) => (
             <span
-              key={bean.id}
+              key={choice.id}
               className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
             >
-              <span className="truncate max-w-[160px]">{bean.title}</span>
+              {choice.projectName && (
+                <span className="text-[10px] uppercase tracking-wide opacity-70 shrink-0">
+                  {choice.projectName}
+                </span>
+              )}
+              <span className="truncate max-w-[160px]">{choice.title}</span>
               <button
                 type="button"
-                onClick={() => handleRemove(bean.id)}
+                onClick={() => handleRemove(choice.id)}
                 className="hover:text-blue-900 dark:hover:text-blue-100 ml-0.5"
-                title={`Remove ${bean.id}`}
+                title={`Remove ${choice.id}`}
               >
                 ✕
               </button>
@@ -101,7 +130,7 @@ export function RelatedBeansSelect({
       {/* Trigger / search button */}
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
         className={`${baseInputClass} text-left text-gray-400 dark:text-gray-500`}
       >
         {placeholder}
@@ -110,35 +139,22 @@ export function RelatedBeansSelect({
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 w-full mt-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg max-h-56 flex flex-col" style={{ top: selectedBeans.length > 0 ? 'auto' : '100%' }}>
+        <div
+          className="absolute z-50 w-full mt-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg max-h-56 flex flex-col"
+          style={{ top: selectedChoices.length > 0 ? 'auto' : '100%' }}
+        >
           <div className="p-2 border-b border-gray-100 dark:border-gray-800">
             <input
               ref={inputRef}
               type="text"
               value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search beans..."
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={otherProjects.length > 0 ? 'Search all projects...' : 'Search beans...'}
               className="w-full text-sm px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              onKeyDown={e => e.key === 'Escape' && setOpen(false)}
+              onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
             />
           </div>
-          <ul className="overflow-y-auto flex-1">
-            {filtered.length === 0 && (
-              <li className="px-3 py-2 text-sm text-gray-400 dark:text-gray-500">No results</li>
-            )}
-            {filtered.map(bean => (
-              <li key={bean.id}>
-                <button
-                  type="button"
-                  onClick={() => handleAdd(bean)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-800 dark:text-gray-200"
-                >
-                  <span className="truncate flex-1">{bean.title}</span>
-                  <span className="text-xs text-gray-400 dark:text-gray-600 font-mono shrink-0">{bean.id}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <BeanChoiceList choices={choices} onPick={handleAdd} loading={loading} />
         </div>
       )}
     </div>

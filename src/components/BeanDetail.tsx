@@ -1,9 +1,16 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import type { Bean } from '../types/beans';
 import { openBeanInEditor, openUrl } from '../lib/tauri';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { isAllowedUrl } from '../lib/markdown';
+import { remarkWikilink } from '../lib/remarkWikilink';
+import { buildBeanIndex, resolveWikilink, wikilinkTitle } from '../lib/resolveWikilink';
+import { EMPTY_PREFIX_MAP, type PrefixMap } from '../lib/prefixMap';
+import { changedFields, type BeanEditState } from '../lib/beanChanges';
+import { asBeansError, isConflict } from '../lib/beansError';
+import { useForeignBeanPreview } from '../hooks/useForeignBeanPreview';
+import { BodyEditor } from './BodyEditor';
 import { ParentBeanSelect } from './ParentBeanSelect';
 import { RelatedBeansSelect } from './RelatedBeansSelect';
 
@@ -14,11 +21,26 @@ interface BeanDetailProps {
   onPriorityChange?: (priority: string | null) => void | Promise<void>;
   availableStatuses: string[];
   allBeans?: Bean[];
-  onSave?: (fields: Partial<Bean>) => void | Promise<void>;
+  onSave?: (fields: Partial<Bean> & { expectBody?: string }) => void | Promise<void>;
   onTouch?: () => void | Promise<void>;
   /** Surface a user-visible error (e.g. failing to launch the external editor). */
   onError?: (message: string) => void;
   projectPath?: string;
+  /**
+   * Select another bean. `projectPath` selects a bean in a different project,
+   * switching the active project first; omitted means the current project.
+   */
+  onSelectBean?: (id: string, projectPath?: string) => void;
+  /** Prefix → project routing, so `[[...]]` can resolve across projects. */
+  prefixMap?: PrefixMap;
+  /**
+   * Whether the `beans` binary is available. Beanstalk writes only through it
+   * (beanstalk-dg1m), so editing, Touch and the status dropdown are gated on
+   * this. The external editor button deliberately is not.
+   */
+  beansAvailable?: boolean;
+  /** Why writes are unavailable, shown on the disabled controls. */
+  beansError?: string | null;
   /** Register an Escape handler with the keyboard nav system. Priority 20 — cancels edit mode. */
   registerEscapeHandler?: (priority: number, handler: () => boolean) => () => void;
   /** Ref callback to expose handleEditStart to the parent. */
@@ -26,6 +48,10 @@ interface BeanDetailProps {
 }
 
 const BEAN_STATUSES = ['todo', 'in-progress', 'completed', 'scrapped', 'draft'];
+
+/** Asked before throwing away edits. The body makes this worth having: it is the
+ * one field where a discarded draft is real work lost. */
+const DISCARD_PROMPT = 'You have unsaved changes. Discard them?';
 
 function statusBadgeClass(status: string): string {
   switch (status.toLowerCase()) {
@@ -64,6 +90,117 @@ function formattedDate(iso: string | null): string {
   }
 }
 
+/**
+ * A Blocking / Blocked By id in the detail pane.
+ *
+ * Clickable when the pane has a way to select another bean, inert otherwise —
+ * so a `BeanDetail` rendered without `onSelectBean` keeps its old appearance
+ * rather than offering a button that does nothing.
+ */
+function RelationBadge({
+  id,
+  onSelectBean,
+  className,
+}: {
+  id: string;
+  onSelectBean?: (id: string, projectPath?: string) => void;
+  className: string;
+}) {
+  const base = `text-xs px-1.5 py-0.5 rounded font-mono ${className}`;
+  if (!onSelectBean) return <span className={base}>{id}</span>;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelectBean(id)}
+      title={`Go to ${id}`}
+      className={`${base} cursor-pointer hover:brightness-95 dark:hover:brightness-125 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+    >
+      {id}
+    </button>
+  );
+}
+
+/**
+ * A `[[...]]` reference in a bean body.
+ *
+ * Local and foreign differ by colour and a small marker, not by shape — they are
+ * the same kind of thing pointing at different places. `missing` is the one that
+ * looks plainly non-interactive.
+ *
+ * Never routed through `openUrl`: that opens the system browser, and these
+ * navigate in-app.
+ */
+function WikilinkView({
+  target,
+  display,
+  resolved,
+  onSelectBean,
+}: {
+  target: string;
+  display?: string;
+  resolved: ReturnType<typeof resolveWikilink>;
+  onSelectBean?: (id: string, projectPath?: string) => void;
+}) {
+  const label = display ?? target;
+
+  // Hover or keyboard focus is what asks for the foreign bean's title. Without
+  // this gate a body citing forty foreign beans would fire forty calls on render.
+  const [probed, setProbed] = useState(false);
+  const preview = useForeignBeanPreview(
+    resolved.kind === 'foreign' ? resolved.projectPath : null,
+    resolved.kind === 'foreign' ? resolved.id : null,
+    probed
+  );
+
+  // A foreign bean confirmed absent is dead, and should look it before it is
+  // clicked rather than after a project switch that finds nothing. An *unreadable*
+  // project is not the same claim, so that degrades to a plain cross-project link.
+  const confirmedGone = resolved.kind === 'foreign' && preview.status === 'missing';
+
+  let title = wikilinkTitle(confirmedGone ? { kind: 'missing' } : resolved);
+  if (resolved.kind === 'foreign' && preview.status === 'found') {
+    title = `${title} — ${preview.title}`;
+  }
+
+  if (resolved.kind === 'missing' || confirmedGone || !onSelectBean) {
+    return (
+      <span
+        title={title}
+        className="text-gray-400 dark:text-gray-500 underline decoration-dotted decoration-gray-300 dark:decoration-gray-600 cursor-help"
+      >
+        {label}
+      </span>
+    );
+  }
+
+  const isForeign = resolved.kind === 'foreign';
+  const colour = isForeign
+    ? 'text-violet-500 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 active:text-violet-700'
+    : 'text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 active:text-blue-700';
+
+  return (
+    <button
+      type="button"
+      title={title}
+      onMouseEnter={() => setProbed(true)}
+      onFocus={() => setProbed(true)}
+      onClick={() =>
+        resolved.kind === 'foreign'
+          ? onSelectBean(resolved.id, resolved.projectPath)
+          : onSelectBean(resolved.bean.id)
+      }
+      className={`${colour} underline cursor-pointer transition-colors rounded focus:outline-none focus:ring-2 focus:ring-blue-500`}
+    >
+      {label}
+      {isForeign && (
+        <span className="ml-0.5 text-[0.7em] align-super" aria-hidden="true">
+          ↗
+        </span>
+      )}
+    </button>
+  );
+}
+
 const BEAN_PRIORITIES = ['critical', 'high', 'normal', 'low', 'deferred'] as const;
 
 export const BeanDetail = memo(function BeanDetail({
@@ -77,14 +214,47 @@ export const BeanDetail = memo(function BeanDetail({
   onTouch,
   onError,
   projectPath = '',
+  onSelectBean,
+  prefixMap = EMPTY_PREFIX_MAP,
+  beansAvailable = true,
+  beansError,
   registerEscapeHandler,
   onEditStartRef,
 }: BeanDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
+
+  /**
+   * Resolution context for `[[...]]` links in the body.
+   *
+   * The id index is built once per bean-set change, not once per link: a body
+   * citing forty beans must not walk the tree forty times.
+   */
+  /**
+   * Configured projects other than this one, for the cross-project pickers.
+   *
+   * Taken from the prefix map, which App already loads for wikilink routing, so
+   * this needs no extra prop or backend call.
+   */
+  const otherProjects = useMemo(
+    () => prefixMap.entries.filter((p) => p.path !== projectPath),
+    [prefixMap, projectPath]
+  );
+
+  const writesDisabledTitle =
+    beansError ??
+    'Editing needs the `beans` CLI, which Beanstalk writes bean files through. The external editor still works.';
+
+  const wikilinkContext = useMemo(
+    () => ({
+      index: buildBeanIndex(allBeans),
+      prefixMap,
+      activeProjectPath: projectPath === '' ? null : projectPath,
+    }),
+    [allBeans, prefixMap, projectPath]
+  );
   const [editTitle, setEditTitle] = useState('');
   const [editStatus, setEditStatus] = useState('');
   const [editTags, setEditTags] = useState('');
-  const [editAssignee, setEditAssignee] = useState('');
   const [editPriority, setEditPriority] = useState<string>('');
   const [editParentId, setEditParentId] = useState<string | null>(null);
   const [editBlocking, setEditBlocking] = useState<string[]>([]);
@@ -93,6 +263,17 @@ export const BeanDetail = memo(function BeanDetail({
   const [isSaving, setIsSaving] = useState(false);
   const [isOpeningEditor, setIsOpeningEditor] = useState(false);
   const [isTouching, setIsTouching] = useState(false);
+  /**
+   * The body as it was when edit mode opened.
+   *
+   * Sent with a body change so the backend can refuse the write if the file
+   * moved underneath (beanstalk-ep8j). Every other field is omitted when
+   * unchanged and so is taken from disk anyway; the body is the one field being
+   * replaced, so it has nothing to preserve it.
+   */
+  const [baseBody, setBaseBody] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [conflict, setConflict] = useState<string | null>(null);
 
   // Reset edit state whenever the bean changes
   useEffect(() => {
@@ -100,75 +281,100 @@ export const BeanDetail = memo(function BeanDetail({
       setEditTitle(bean.title || '');
       setEditStatus(bean.status || '');
       setEditTags((bean.tags || []).join(', '));
-      setEditAssignee(bean.assignee || '');
       setEditPriority(bean.priority || '');
       setEditParentId(bean.parent ?? null);
       setEditBlocking(bean.blocking || []);
       setEditBlockedBy(bean.blocked_by || []);
     }
+    setBaseBody(bean?.body ?? '');
+    setEditBody(bean?.body ?? '');
     setIsEditing(false);
     setIsDirty(false);
+    setConflict(null);
   }, [bean?.id]);
 
-  // Track dirty state
+  /** The form's values, normalised for comparison and for the save payload. */
+  const editState = useMemo<BeanEditState>(
+    () => ({
+      title: editTitle,
+      status: editStatus,
+      tags: editTags.split(',').map((t) => t.trim()).filter(Boolean),
+      priority: editPriority,
+      parentId: editParentId,
+      blocking: editBlocking,
+      blockedBy: editBlockedBy,
+      body: editBody,
+    }),
+    [editTitle, editStatus, editTags, editPriority, editParentId, editBlocking, editBlockedBy, editBody]
+  );
+
+  /**
+   * Exactly what will be written. The dirty flag and the save payload derive
+   * from one comparison, so they cannot disagree -- the previous effect had its
+   * own inline comparison whose dependency list omitted `editPriority`, so a
+   * priority-only change never marked the form dirty.
+   */
+  const changes = useMemo(
+    () => (bean ? changedFields(bean, editState) : {}),
+    [bean, editState]
+  );
+
   useEffect(() => {
-    if (!bean || !isEditing) return;
-    const originalTags = (bean.tags || []).join(', ');
-    const dirty =
-      editTitle !== (bean.title || '') ||
-      editStatus !== (bean.status || '') ||
-      editTags !== originalTags ||
-      editAssignee !== (bean.assignee || '') ||
-      editPriority !== (bean.priority || '') ||
-      editParentId !== (bean.parent ?? null) ||
-      JSON.stringify(editBlocking) !== JSON.stringify(bean.blocking || []) ||
-      JSON.stringify(editBlockedBy) !== JSON.stringify(bean.blocked_by || []);
-    setIsDirty(dirty);
-  }, [editTitle, editStatus, editTags, editAssignee, editParentId, editBlocking, editBlockedBy, bean, isEditing]);
+    setIsDirty(isEditing && Object.keys(changes).length > 0);
+  }, [changes, isEditing]);
 
   const handleEditStart = useCallback(() => {
     if (!bean) return;
     setEditTitle(bean.title || '');
     setEditStatus(bean.status || '');
     setEditTags((bean.tags || []).join(', '));
-    setEditAssignee(bean.assignee || '');
     setEditPriority(bean.priority || '');
     setEditParentId(bean.parent ?? null);
     setEditBlocking(bean.blocking || []);
     setEditBlockedBy(bean.blocked_by || []);
+    setBaseBody(bean.body ?? '');
+    setEditBody(bean.body ?? '');
     setIsDirty(false);
+    setConflict(null);
     setIsEditing(true);
   }, [bean]);
 
   const handleCancel = useCallback(() => {
+    // Now that the body is editable inline, cancelling can discard real work, so
+    // confirm rather than dropping it silently. Escape routes here too.
+    if (isDirty && !window.confirm(DISCARD_PROMPT)) return;
     setIsEditing(false);
     setIsDirty(false);
-  }, []);
+    setConflict(null);
+  }, [isDirty]);
 
   const handleSave = useCallback(async () => {
     if (!bean) return;
-    const tagsArray = editTags
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean);
-    setIsSaving(true);
-    try {
-      await onSave?.({
-        title: editTitle,
-        status: editStatus,
-        tags: tagsArray,
-        assignee: editAssignee || null,
-        priority: editPriority || null,
-        parent: editParentId,
-        blocking: editBlocking,
-        blocked_by: editBlockedBy,
-      });
+    // Nothing changed: close without writing. Touch is the deliberate way to
+    // bump `updated_at`, so a Save that silently did it would be surprising.
+    if (Object.keys(changes).length === 0) {
       setIsEditing(false);
       setIsDirty(false);
+      return;
+    }
+    setIsSaving(true);
+    setConflict(null);
+    try {
+      // The base is only relevant when the body is actually being rewritten.
+      await onSave?.(
+        changes.body !== undefined ? { ...changes, expectBody: baseBody } : changes
+      );
+      setIsEditing(false);
+      setIsDirty(false);
+    } catch (err) {
+      // Stay in edit mode either way: the typed text is the one thing that must
+      // never be lost. A conflict gets its own explanation; anything else has
+      // already been surfaced as a toast by the caller.
+      if (isConflict(err)) setConflict(asBeansError(err).message);
     } finally {
       setIsSaving(false);
     }
-  }, [bean, editTitle, editStatus, editTags, editAssignee, editPriority, editParentId, editBlocking, editBlockedBy, onSave]);
+  }, [bean, changes, baseBody, onSave]);
 
   const handleOpenInEditor = useCallback(async () => {
     if (!bean) return;
@@ -199,7 +405,7 @@ export const BeanDetail = memo(function BeanDetail({
   // We expose a stable ref-based check. For the confirm() approach per spec:
   const confirmDiscard = useCallback((): boolean => {
     if (!isDirty) return true;
-    return window.confirm('You have unsaved changes. Discard them?');
+    return window.confirm(DISCARD_PROMPT);
   }, [isDirty]);
 
   // Expose confirmDiscard globally so App.tsx (or other components) can call it
@@ -330,6 +536,24 @@ export const BeanDetail = memo(function BeanDetail({
           </select>
         </div>
 
+        {conflict && (
+          <div
+            role="alert"
+            className="text-sm px-3 py-2 rounded border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300"
+          >
+            {conflict}
+          </div>
+        )}
+        {!conflict && isEditing && bean && (bean.body ?? '') !== baseBody && (
+          <div
+            role="status"
+            className="text-sm px-3 py-2 rounded border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300"
+          >
+            This bean changed on disk while you were editing. Your text is still
+            here; saving a body change will be refused so nothing is overwritten.
+          </div>
+        )}
+
         {/* Parent Bean */}
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -354,6 +578,7 @@ export const BeanDetail = memo(function BeanDetail({
             onChange={setEditBlocking}
             excludeId={bean?.id}
             placeholder="Add bean this blocks..."
+            otherProjects={otherProjects}
           />
         </div>
 
@@ -368,6 +593,7 @@ export const BeanDetail = memo(function BeanDetail({
             onChange={setEditBlockedBy}
             excludeId={bean?.id}
             placeholder="Add bean that blocks this..."
+            otherProjects={otherProjects}
           />
         </div>
 
@@ -397,32 +623,42 @@ export const BeanDetail = memo(function BeanDetail({
           )}
         </div>
 
-        {/* Assignee */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-            Assignee
-          </label>
-          <input
-            type="text"
-            value={editAssignee}
-            onChange={(e) => setEditAssignee(e.target.value)}
-            className="w-full text-sm px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="username or name"
-          />
-        </div>
+        {/*
+          No Assignee input: `beans` has no assignee field, and Beanstalk writes
+          only through it (beanstalk-dg1m), so an input here could not persist.
+          The value is still parsed and shown in view mode, and the external
+          editor can still set it. See beanstalk-mlm7.
+        */}
 
-        {/* Body note */}
-        <div className="mt-2 flex items-center gap-3 p-3 rounded border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            Edit body in external editor →
-          </span>
-          <button
-            onClick={handleOpenInEditor}
-            disabled={isOpeningEditor}
-            className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
-          >
-            {isOpeningEditor ? 'Opening…' : 'Open in Editor'}
-          </button>
+        {/* Body */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Body
+            </label>
+            {/*
+              Kept alongside the inline editor, not replaced by it. The external
+              editor remains the right tool for long-form work, is never gated on
+              the `beans` binary, and can write frontmatter beans cannot express.
+            */}
+            <button
+              onClick={handleOpenInEditor}
+              disabled={isOpeningEditor}
+              title="Open this bean in your external editor"
+              className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+            >
+              {isOpeningEditor ? 'Opening…' : <>Editor <span className="text-[10px]">↗</span></>}
+            </button>
+          </div>
+          <BodyEditor
+            value={editBody}
+            onChange={setEditBody}
+            beans={allBeans}
+            otherProjects={otherProjects}
+            placeholder="Markdown body… type [[ to link a bean"
+            rows={16}
+            className="w-full text-sm px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono resize-y"
+          />
         </div>
 
         {/* ID (read-only reference) */}
@@ -451,8 +687,8 @@ export const BeanDetail = memo(function BeanDetail({
         {onTouch && (
           <button
             onClick={handleTouch}
-            disabled={isTouching}
-            title="Update updated_at to now"
+            disabled={isTouching || !beansAvailable}
+            title={beansAvailable ? 'Update updated_at to now' : writesDisabledTitle}
             className="text-xs px-2.5 py-1 rounded border border-blue-200 dark:border-blue-800 text-blue-400 dark:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors disabled:opacity-50"
           >
             {isTouching ? 'Touching…' : 'Touch'}
@@ -461,10 +697,17 @@ export const BeanDetail = memo(function BeanDetail({
         <div className="flex-1" />
         <button
           onClick={handleEditStart}
-          className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          disabled={!beansAvailable}
+          title={beansAvailable ? undefined : writesDisabledTitle}
+          className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Edit
         </button>
+        {/*
+          Never gated on `beans`: this launches an editor rather than writing
+          anything, so it is the escape hatch that keeps the pane usable when the
+          binary is missing. See beanstalk-mlm7.
+        */}
         <button
           onClick={handleOpenInEditor}
           disabled={isOpeningEditor}
@@ -584,12 +827,12 @@ export const BeanDetail = memo(function BeanDetail({
           </span>
           <div className="flex flex-wrap gap-1">
             {bean.blocking.map((id) => (
-              <span
+              <RelationBadge
                 key={id}
-                className="text-xs px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 font-mono"
-              >
-                {id}
-              </span>
+                id={id}
+                onSelectBean={onSelectBean}
+                className="bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300"
+              />
             ))}
           </div>
         </div>
@@ -603,12 +846,12 @@ export const BeanDetail = memo(function BeanDetail({
           </span>
           <div className="flex flex-wrap gap-1">
             {bean.blocked_by.map((id) => (
-              <span
+              <RelationBadge
                 key={id}
-                className="text-xs px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-mono"
-              >
-                {id}
-              </span>
+                id={id}
+                onSelectBean={onSelectBean}
+                className="bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300"
+              />
             ))}
           </div>
         </div>
@@ -634,8 +877,19 @@ export const BeanDetail = memo(function BeanDetail({
         {bean.body ? (
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, remarkWikilink]}
               components={{
+                // @ts-expect-error `wikilink` is the custom element remarkWikilink emits.
+                wikilink: ({target, display}: {target?: string; display?: string}) => (
+                  target ? (
+                    <WikilinkView
+                      target={target}
+                      display={display}
+                      resolved={resolveWikilink(target, wikilinkContext)}
+                      onSelectBean={onSelectBean}
+                    />
+                  ) : null
+                ),
                 a: ({href, children}) => (
                   href && isAllowedUrl(href) ? (
                     <span

@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl as tauriOpenUrl } from '@tauri-apps/plugin-opener';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
-import type { Bean, AppConfig, BeanScript, ScriptOutput, SystemAppearance } from '../types/beans';
+import type { Bean, AppConfig, BeanScript, ScriptOutput, SystemAppearance, ProjectPrefix, BeansCliStatus } from '../types/beans';
 
 export const getBeans = (projectPath: string) =>
   invoke<Bean[]>('get_beans', { projectPath });
@@ -17,7 +17,6 @@ export const createBean = (params: {
   priority?: string;
   parent?: string | null;
   tags?: string[];
-  assignee?: string | null;
   body?: string;
   blocking?: string[];
   blockedBy?: string[];
@@ -29,15 +28,20 @@ export const updateBean = (params: {
   title?: string;
   status?: string;
   tags?: string[];
-  assignee?: string | null;
   body?: string;
   parent?: string | null;
   priority?: string | null;
   blocking?: string[];
   blockedBy?: string[];
+  /**
+   * The body the edit was based on. When given, the write is refused with a
+   * CONFLICT unless the body on disk still matches (beanstalk-ep8j).
+   */
+  expectBody?: string;
 }) => {
   // Rust's serde maps JSON null → None (keep existing) for Option<String>.
-  // Send "" instead of null so the backend receives Some("") and clears the field.
+  // Send "" instead of null so the backend receives Some("") and clears the
+  // field; the backend turns that into the CLI's explicit clear.
   const payload = { ...params };
   if (payload.priority === null) payload.priority = '';
   if (payload.parent === null) payload.parent = '';
@@ -73,6 +77,15 @@ export const removeProject = (path: string) => invoke<AppConfig>('remove_project
 export const setActiveProject = (path: string) => invoke<AppConfig>('set_active_project', { path });
 
 export const updateConfig = (config: AppConfig) => invoke<AppConfig>('update_config', { config });
+
+export const getProjectPrefixes = () => invoke<ProjectPrefix[]>('get_project_prefixes');
+
+/**
+ * Whether the `beans` binary is available. Beanstalk writes bean files only
+ * through it (beanstalk-dg1m), so editing is gated on this. Reads and the
+ * external editor are unaffected.
+ */
+export const beansCliStatus = () => invoke<BeansCliStatus>('beans_cli_status');
 
 export const listBeanScripts = (projectPath: string) =>
   invoke<BeanScript[]>('list_bean_scripts', { projectPath });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { BeanList, collectTags, filterByTags } from '../../components/BeanList'
+import { relationTarget } from '../../lib/beanTree'
 import type { Bean } from '../../types/beans'
 
 function makeBean(overrides: Partial<Bean> = {}): Bean {
@@ -188,5 +189,24 @@ describe('filterByTags', () => {
   it('excludes beans with no matching tags', () => {
     const beans = [makeBean({ tags: ['frontend'] })]
     expect(filterByTags(beans, ['bug'])).toHaveLength(0)
+  })
+})
+
+describe('relationTarget (beanstalk-3wh2)', () => {
+  it('jumps straight to the single relation', () => {
+    expect(relationTarget(makeBean({ id: 'bean-001', blocked_by: ['bean-dep'] }))).toBe('bean-dep')
+    expect(relationTarget(makeBean({ id: 'bean-001', blocking: ['bean-blk'] }))).toBe('bean-blk')
+  })
+
+  it('selects the bean itself when several relations exist, so none is unreachable', () => {
+    const bean = makeBean({ id: 'bean-001', blocked_by: ['bean-dep'], blocking: ['bean-blk'] })
+    expect(relationTarget(bean)).toBe('bean-001')
+
+    const many = makeBean({ id: 'bean-001', blocking: ['bean-a', 'bean-b'] })
+    expect(relationTarget(many)).toBe('bean-001')
+  })
+
+  it('falls back to the bean itself when there are no relations', () => {
+    expect(relationTarget(makeBean({ id: 'bean-001' }))).toBe('bean-001')
   })
 })

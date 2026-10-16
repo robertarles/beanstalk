@@ -1,7 +1,16 @@
 // beanstalk-dhgw: Tauri commands with validation
 
 use super::{load_config, save_config, AppConfig, Project};
+use crate::beans::parse_beans_config;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+/// The default id prefix used when a project's `.beans.yml` declares none.
+///
+/// Must stay in step with `crate::commands::create_bean`, which mints ids with
+/// the same fallback. If they disagree, a prefix-less project's own beans stop
+/// resolving against it.
+pub const DEFAULT_PREFIX: &str = "bean-";
 
 #[tauri::command]
 pub fn get_config() -> AppConfig {
@@ -100,4 +109,95 @@ pub fn set_active_project(path: String) -> Result<AppConfig, String> {
 pub fn update_config(config: AppConfig) -> Result<AppConfig, String> {
     save_config(&config).map_err(|e| e.to_string())?;
     Ok(config)
+}
+
+
+// beanstalk-1j24: id prefix → project routing
+
+/// A configured project together with the id prefix its beans carry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProjectPrefix {
+    pub path: String,
+    pub name: String,
+    pub prefix: String,
+}
+
+/// List every configured project with its bean id prefix.
+///
+/// This is what lets a bare id like `hivelens-7k2p` be routed to the project
+/// that owns it without reading a single bean from that project: ids are minted
+/// as `{prefix}{random}`, so the prefix alone identifies the owner.
+///
+/// Duplicates are deliberately *not* removed. Nothing stops two projects
+/// declaring the same prefix (or defaulting to the same one), and a caller that
+/// cannot see the collision would resolve such ids to an arbitrary project. The
+/// caller is expected to detect repeats and decline to resolve them.
+///
+/// Cost is one small config read per project. No bean files are opened.
+#[tauri::command]
+pub fn get_project_prefixes() -> Vec<ProjectPrefix> {
+    project_prefixes(load_config().projects)
+}
+
+/// The body of [`get_project_prefixes`], split out so it can be tested against
+/// temporary project directories instead of the user's real config file.
+pub fn project_prefixes(projects: Vec<Project>) -> Vec<ProjectPrefix> {
+    projects
+        .into_iter()
+        .map(|p| {
+            let prefix = parse_beans_config(Path::new(&p.path))
+                .prefix
+                .unwrap_or_else(|| DEFAULT_PREFIX.to_string());
+            ProjectPrefix { path: p.path, name: p.name, prefix }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod prefix_tests {
+    use super::*;
+    use std::fs;
+
+    fn temp_project(tag: &str, yml: Option<&str>) -> String {
+        let dir = std::env::temp_dir().join(format!("beanstalk_prefix_{tag}_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join(".beans")).unwrap();
+        if let Some(body) = yml {
+            fs::write(dir.join(".beans.yml"), body).unwrap();
+        }
+        dir.to_string_lossy().to_string()
+    }
+
+    fn project(path: String, name: &str) -> Project {
+        Project { path, name: name.to_string() }
+    }
+
+    #[test]
+    fn reads_the_declared_prefix() {
+        let path = temp_project("declared", Some("beans:\n    prefix: hivelens-\n"));
+        let out = project_prefixes(vec![project(path.clone(), "hivelens")]);
+        assert_eq!(out, vec![ProjectPrefix { path, name: "hivelens".into(), prefix: "hivelens-".into() }]);
+    }
+
+    #[test]
+    fn falls_back_to_the_same_default_create_bean_uses() {
+        let path = temp_project("nodefault", None);
+        let out = project_prefixes(vec![project(path, "plain")]);
+        assert_eq!(out[0].prefix, DEFAULT_PREFIX);
+    }
+
+    #[test]
+    fn keeps_duplicates_so_callers_can_see_a_collision() {
+        let a = temp_project("dupa", Some("beans:\n    prefix: shared-\n"));
+        let b = temp_project("dupb", Some("beans:\n    prefix: shared-\n"));
+        let out = project_prefixes(vec![project(a, "a"), project(b, "b")]);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].prefix, "shared-");
+        assert_eq!(out[1].prefix, "shared-");
+    }
+
+    #[test]
+    fn empty_config_yields_nothing() {
+        assert!(project_prefixes(vec![]).is_empty());
+    }
 }
