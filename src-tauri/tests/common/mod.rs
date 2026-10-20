@@ -28,6 +28,21 @@ pub struct Harness {
 }
 
 static HARNESS: OnceLock<Harness> = OnceLock::new();
+static HOME_TO_REMOVE: OnceLock<PathBuf> = OnceLock::new();
+
+extern "C" {
+    fn atexit(callback: extern "C" fn()) -> i32;
+}
+
+/// Removes the throwaway HOME when the test process exits. A `static` is never
+/// dropped, so `Drop` cannot do it; `atexit` runs after the last test.
+extern "C" fn remove_home() {
+    if std::env::var_os("BEANSTALK_TEST_KEEP").is_none() {
+        if let Some(home) = HOME_TO_REMOVE.get() {
+            let _ = std::fs::remove_dir_all(home);
+        }
+    }
+}
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Locate the real `beans`: `BEANSTALK_TEST_BEANS`, else `PATH`, else Homebrew.
@@ -60,6 +75,8 @@ pub fn init_with(beans_bin: Option<&dyn Fn(&Path) -> PathBuf>, editor: Option<&d
         let original_home = PathBuf::from(std::env::var_os("HOME").expect("HOME is set"));
 
         let home = unique_dir("home");
+        let _ = HOME_TO_REMOVE.set(home.clone());
+        unsafe { atexit(remove_home) };
         std::env::set_var("HOME", &home);
 
         // Guard: the config path must now be inside the throwaway HOME. If `dirs`

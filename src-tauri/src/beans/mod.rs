@@ -210,15 +210,33 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    // Helper: create a unique temp directory under std::env::temp_dir()
-    fn temp_dir(suffix: &str) -> PathBuf {
-        let base = std::env::temp_dir();
-        let dir = base.join(format!("beanstalk_test_{}_{}", suffix, std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .subsec_nanos()));
+    /// A unique temp directory, removed when dropped.
+    struct TempDir(PathBuf);
+
+    impl std::ops::Deref for TempDir {
+        type Target = PathBuf;
+        fn deref(&self) -> &PathBuf {
+            &self.0
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn temp_dir(suffix: &str) -> TempDir {
+        let dir = std::env::temp_dir().join(format!(
+            "beanstalk_test_{suffix}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos()
+        ));
         fs::create_dir_all(&dir).unwrap();
-        dir
+        TempDir(dir)
     }
 
     // Helper: build a minimal Bean for use in tree tests
