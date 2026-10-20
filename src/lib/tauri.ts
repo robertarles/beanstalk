@@ -38,6 +38,13 @@ export const updateBean = (params: {
    * CONFLICT unless the body on disk still matches (beanstalk-ep8j).
    */
   expectBody?: string;
+  /**
+   * The lists a tags / blocking / blockedBy edit started from, sent with that
+   * list so the backend sends only the user's own adds and removes.
+   */
+  expectTags?: string[];
+  expectBlocking?: string[];
+  expectBlockedBy?: string[];
 }) => {
   // Rust's serde maps JSON null → None (keep existing) for Option<String>.
   // Send "" instead of null so the backend receives Some("") and clears the

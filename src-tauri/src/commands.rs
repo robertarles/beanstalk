@@ -1,8 +1,6 @@
 // Tauri commands for bean CRUD operations (beanstalk-v5m3)
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use crate::beans::{build_tree, Bean};
 use crate::beanscli::{diff_list_args, run_beans, BeansCliError};
@@ -69,36 +67,6 @@ fn to_bean(project: &Path, c: CliBean) -> Bean {
     }
 }
 
-/// The list fields an edit is based on, as the UI last saw them.
-#[derive(Clone)]
-struct Snapshot {
-    tags: Vec<String>,
-    blocking: Vec<String>,
-    blocked_by: Vec<String>,
-}
-
-/// What this process last served for each bean, keyed by project and id.
-///
-/// The UI sends a tag or relation edit as the whole list it ended up with. The
-/// CLI applies adds and removes, so the list has to become a diff, and against
-/// what matters: diffed against a fresh read, an item someone else added since
-/// the edit began looks like one the user removed, and is removed. Diffed
-/// against the list the user started from, only the user's own changes are sent.
-static SNAPSHOTS: Mutex<Option<HashMap<(String, String), Snapshot>>> = Mutex::new(None);
-
-fn remember(project: &str, bean: &Bean) {
-    if let Ok(mut guard) = SNAPSHOTS.lock() {
-        guard.get_or_insert_with(HashMap::new).insert(
-            (project.to_string(), bean.id.clone()),
-            Snapshot { tags: bean.tags.clone(), blocking: bean.blocking.clone(), blocked_by: bean.blocked_by.clone() },
-        );
-    }
-}
-
-fn snapshot(project: &str, id: &str) -> Option<Snapshot> {
-    SNAPSHOTS.lock().ok()?.as_ref()?.get(&(project.to_string(), id.to_string())).cloned()
-}
-
 fn list_flat(project: &Path) -> Result<Vec<Bean>, BeansCliError> {
     let out = run_beans(project, &["list".to_string(), "--full".to_string()], None)?;
     if out.trim().is_empty() {
@@ -112,10 +80,6 @@ fn list_flat(project: &Path) -> Result<Vec<Bean>, BeansCliError> {
         .filter(|c| !c.path.starts_with("archive/"))
         .map(|c| to_bean(project, c))
         .collect();
-    let key = project.to_string_lossy();
-    for b in &beans {
-        remember(&key, b);
-    }
     Ok(beans)
 }
 
@@ -130,9 +94,7 @@ pub fn get_bean(project_path: String, bean_id: String) -> Result<Bean, BeansCliE
     let out = run_beans(path, &["show".to_string(), bean_id.clone()], None)?;
     let c: CliBean = serde_json::from_str(&out)
         .map_err(|e| BeansCliError::new("PARSE_FAILED", format!("could not read `beans show {bean_id}` output: {e}")))?;
-    let bean = to_bean(path, c);
-    remember(&project_path, &bean);
-    Ok(bean)
+    Ok(to_bean(path, c))
 }
 
 // ── Create command (beanstalk-o6fz) ─────────────────────────────────────────
@@ -214,6 +176,13 @@ struct CreatedBean {
 
 /// Update a bean by delegating to the `beans` CLI (beanstalk-dg1m).
 ///
+/// `expect_tags`, `expect_blocking` and `expect_blocked_by` are the lists the
+/// caller's edit started from, sent with a change to that list. The CLI sets
+/// lists with adds and removes, so a list edit becomes a diff against that base
+/// rather than against a fresh read, in which an item someone else added since
+/// the edit began would look like one the user removed. Absent, the fresh read
+/// is the base.
+///
 /// `expect_body` is the body the caller based its edit on. When supplied, the
 /// write is refused unless the body still on disk matches it (beanstalk-ep8j).
 /// Only the body needs this guard: every other field is omitted when unchanged
@@ -238,18 +207,17 @@ pub fn update_bean(
     blocking: Option<Vec<String>>,
     blocked_by: Option<Vec<String>>,
     expect_body: Option<String>,
+    expect_tags: Option<Vec<String>>,
+    expect_blocking: Option<Vec<String>>,
+    expect_blocked_by: Option<Vec<String>>,
 ) -> Result<Bean, BeansCliError> {
-    // Tags and relations are set incrementally by the CLI, so a "set this list"
-    // from the UI has to become adds and removes. The base is the lists the edit
-    // started from (see [`SNAPSHOTS`]), taken before the read below refreshes
-    // them; with none, that read is the base.
-    let base_lists = snapshot(&project_path, &bean_id);
     let existing = get_bean(project_path.clone(), bean_id.clone())?;
-    let base = base_lists.unwrap_or_else(|| Snapshot {
-        tags: existing.tags.clone(),
-        blocking: existing.blocking.clone(),
-        blocked_by: existing.blocked_by.clone(),
-    });
+
+    let (base_tags, base_blocking, base_blocked_by) = (
+        expect_tags.as_deref().unwrap_or(&existing.tags),
+        expect_blocking.as_deref().unwrap_or(&existing.blocking),
+        expect_blocked_by.as_deref().unwrap_or(&existing.blocked_by),
+    );
 
     // Checked here rather than in the frontend so the window between reading and
     // writing is as small as it can be without the CLI's help.
@@ -293,13 +261,13 @@ pub fn update_bean(
         None => {}
     }
     if let Some(desired) = &tags {
-        args.extend(diff_list_args("--tag", "--remove-tag", &base.tags, desired));
+        args.extend(diff_list_args("--tag", "--remove-tag", base_tags, desired));
     }
     if let Some(desired) = &blocking {
-        args.extend(diff_list_args("--blocking", "--remove-blocking", &base.blocking, desired));
+        args.extend(diff_list_args("--blocking", "--remove-blocking", base_blocking, desired));
     }
     if let Some(desired) = &blocked_by {
-        args.extend(diff_list_args("--blocked-by", "--remove-blocked-by", &base.blocked_by, desired));
+        args.extend(diff_list_args("--blocked-by", "--remove-blocked-by", base_blocked_by, desired));
     }
 
     // Stream the body rather than passing it in argv: no escaping, no size limit.
@@ -329,7 +297,7 @@ pub fn update_bean_status(
     bean_id: String,
     status: String,
 ) -> Result<Bean, BeansCliError> {
-    update_bean(project_path, bean_id, None, Some(status), None, None, None, None, None, None, None)
+    update_bean(project_path, bean_id, None, Some(status), None, None, None, None, None, None, None, None, None, None)
 }
 
 // ── Search command (beanstalk-lmx4) ─────────────────────────────────────────
@@ -835,8 +803,7 @@ mod tests {
             None,
             None,
             None,
-            None,
-        )
+            None, None, None, None)
         .expect("update_bean should succeed");
 
         let content = fs::read_to_string(&updated.file_path).expect("read bean file");
@@ -902,8 +869,7 @@ mod tests {
             project_path,
             bean.id.clone(),
             None, None, None, None, None, None, None, None,
-            None,
-        )
+            None, None, None, None)
         .expect("a no-change update must succeed rather than erroring");
 
         assert_eq!(touched.status, bean.status, "status must be unchanged");
@@ -942,8 +908,7 @@ mod tests {
             None, None, None,
             Some("My edit.".to_string()),
             None, None, None, None,
-            Some("Base body.".to_string()),
-        )
+            Some("Base body.".to_string()), None, None, None)
         .expect("an unchanged base must not be treated as a conflict");
 
         assert_eq!(updated.body.trim(), "My edit.");
@@ -964,8 +929,7 @@ mod tests {
             None, None, None,
             Some("Base body.\n\nAppended by an agent.".to_string()),
             None, None, None, None,
-            None,
-        )
+            None, None, None, None)
         .expect("the concurrent write should succeed");
 
         let err = update_bean(
@@ -974,8 +938,7 @@ mod tests {
             None, None, None,
             Some("My edit.".to_string()),
             None, None, None, None,
-            Some("Base body.".to_string()),
-        )
+            Some("Base body.".to_string()), None, None, None)
         .expect_err("a stale base must be refused");
 
         assert_eq!(err.code, "CONFLICT", "must be distinguishable from other failures");
@@ -1005,8 +968,7 @@ mod tests {
             None,
             Some("in-progress".to_string()),
             None, None, None, None, None, None,
-            None,
-        )
+            None, None, None, None)
         .expect("a status-only write needs no base");
 
         assert_eq!(updated.status, "in-progress");
@@ -1029,8 +991,7 @@ mod tests {
             None, None, None,
             Some("Edited.".to_string()),
             None, None, None, None,
-            Some("Base body.\n\n".to_string()),
-        )
+            Some("Base body.\n\n".to_string()), None, None, None)
         .expect("a trailing-newline difference must not be a conflict");
 
         assert_eq!(updated.body.trim(), "Edited.");
@@ -1398,8 +1359,7 @@ mod tests {
             None,
             None,
             None,
-            None,
-        );
+            None, None, None, None);
 
         assert!(result.is_ok(), "update_bean should succeed: {:?}", result);
         let updated = result.unwrap();
@@ -1427,8 +1387,7 @@ mod tests {
             None,
             None,
             None,
-            None,
-        );
+            None, None, None, None);
 
         assert!(result.is_err(), "update_bean should return Err for unknown id");
     }
@@ -1481,8 +1440,7 @@ mod tests {
             None,
             None,
             None,
-            None,
-        )
+            None, None, None, None)
         .expect("update_bean should succeed");
 
         assert!(updated.parent.is_none(), "empty-string parent should clear it");
@@ -1555,8 +1513,7 @@ mod tests {
             None,
             None,
             None,
-            None,
-        )
+            None, None, None, None)
         .expect("update_bean should succeed");
 
         assert_eq!(updated.title, tricky_title, "title must survive update round-trip");

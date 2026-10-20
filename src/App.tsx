@@ -14,7 +14,7 @@ import { useKeyboardNav } from './hooks/useKeyboardNav';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { BeanList, collectTags } from './components/BeanList';
-import { BeanDetail } from './components/BeanDetail';
+import { BeanDetail, type SaveBases } from './components/BeanDetail';
 import { Toast } from './components/Toast';
 import { KeyboardHelp } from './components/KeyboardHelp';
 import { BeanActionMenu, type MenuAnchor } from './components/BeanActionMenu';
@@ -391,7 +391,7 @@ function App() {
   );
 
   const handleSave = useCallback(
-    async (fields: Partial<Bean> & { expectBody?: string }) => {
+    async (fields: Partial<Bean> & SaveBases) => {
       if (!activeProject || !selectedBeanId) return;
       try {
         const updated = await updateBean({
@@ -406,6 +406,9 @@ function App() {
           blocking: fields.blocking,
           blockedBy: fields.blocked_by,
           expectBody: fields.expectBody,
+          expectTags: fields.expectTags,
+          expectBlocking: fields.expectBlocking,
+          expectBlockedBy: fields.expectBlockedBy,
         });
         applyBeanUpdate(updated);
         refresh();

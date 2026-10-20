@@ -21,7 +21,7 @@ interface BeanDetailProps {
   onPriorityChange?: (priority: string | null) => void | Promise<void>;
   availableStatuses: string[];
   allBeans?: Bean[];
-  onSave?: (fields: Partial<Bean> & { expectBody?: string }) => void | Promise<void>;
+  onSave?: (fields: Partial<Bean> & SaveBases) => void | Promise<void>;
   onTouch?: () => void | Promise<void>;
   /** Surface a user-visible error (e.g. failing to launch the external editor). */
   onError?: (message: string) => void;
@@ -51,6 +51,14 @@ const BEAN_STATUSES = ['todo', 'in-progress', 'completed', 'scrapped', 'draft'];
 
 /** Asked before throwing away edits. The body makes this worth having: it is the
  * one field where a discarded draft is real work lost. */
+/** What a save is based on; see `baseBody` and `baseLists` in the component. */
+export interface SaveBases {
+  expectBody?: string;
+  expectTags?: string[];
+  expectBlocking?: string[];
+  expectBlockedBy?: string[];
+}
+
 const DISCARD_PROMPT = 'You have unsaved changes. Discard them?';
 
 function statusBadgeClass(status: string): string {
@@ -272,6 +280,17 @@ export const BeanDetail = memo(function BeanDetail({
    * replaced, so it has nothing to preserve it.
    */
   const [baseBody, setBaseBody] = useState('');
+  /**
+   * The lists the edit started from, fixed when editing starts. A tag or
+   * relation edit is sent with the base it was made from, so the backend turns
+   * it into adds and removes of the user's own changes: a refresh mid-edit
+   * (someone else's change reloading the bean) must not move it.
+   */
+  const [baseLists, setBaseLists] = useState<{ tags: string[]; blocking: string[]; blockedBy: string[] }>({
+    tags: [],
+    blocking: [],
+    blockedBy: [],
+  });
   const [editBody, setEditBody] = useState('');
   const [conflict, setConflict] = useState<string | null>(null);
 
@@ -287,6 +306,7 @@ export const BeanDetail = memo(function BeanDetail({
       setEditBlockedBy(bean.blocked_by || []);
     }
     setBaseBody(bean?.body ?? '');
+    setBaseLists({ tags: bean?.tags || [], blocking: bean?.blocking || [], blockedBy: bean?.blocked_by || [] });
     setEditBody(bean?.body ?? '');
     setIsEditing(false);
     setIsDirty(false);
@@ -333,6 +353,7 @@ export const BeanDetail = memo(function BeanDetail({
     setEditBlocking(bean.blocking || []);
     setEditBlockedBy(bean.blocked_by || []);
     setBaseBody(bean.body ?? '');
+    setBaseLists({ tags: bean.tags || [], blocking: bean.blocking || [], blockedBy: bean.blocked_by || [] });
     setEditBody(bean.body ?? '');
     setIsDirty(false);
     setConflict(null);
@@ -360,10 +381,14 @@ export const BeanDetail = memo(function BeanDetail({
     setIsSaving(true);
     setConflict(null);
     try {
-      // The base is only relevant when the body is actually being rewritten.
-      await onSave?.(
-        changes.body !== undefined ? { ...changes, expectBody: baseBody } : changes
-      );
+      // Each base is only relevant when its field is actually being rewritten.
+      await onSave?.({
+        ...changes,
+        ...(changes.body !== undefined ? { expectBody: baseBody } : {}),
+        ...(changes.tags !== undefined ? { expectTags: baseLists.tags } : {}),
+        ...(changes.blocking !== undefined ? { expectBlocking: baseLists.blocking } : {}),
+        ...(changes.blocked_by !== undefined ? { expectBlockedBy: baseLists.blockedBy } : {}),
+      });
       setIsEditing(false);
       setIsDirty(false);
     } catch (err) {
@@ -374,7 +399,7 @@ export const BeanDetail = memo(function BeanDetail({
     } finally {
       setIsSaving(false);
     }
-  }, [bean, changes, baseBody, onSave]);
+  }, [bean, changes, baseBody, baseLists, onSave]);
 
   const handleOpenInEditor = useCallback(async () => {
     if (!bean) return;
