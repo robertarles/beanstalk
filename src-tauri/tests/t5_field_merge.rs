@@ -155,3 +155,46 @@ fn t5_blocked_by_edit_keeps_an_external_blocked_by_add() {
     want.sort();
     assert_eq!(list(&p, &id, "blocked_by"), want, "the user's remove or the external blocked_by add went wrong");
 }
+
+#[test]
+fn t5_empty_tag_base_is_a_base_not_no_base() {
+    // The edit started from a bean with no tags. An empty base must not be read
+    // as "no base" (which falls back to a fresh read and removes the external add).
+    init();
+    let p = project("t5e");
+    let id = seed(&p, "No tags yet", &[], None);
+    let _opened = get_bean(p.dir_str(), id.clone()).unwrap();
+    beans(&p.dir, &["update", &id, "--tag", "theirs", "--json"], None);
+    save_lists(&p, &id, Some((&["mine"], &[])), None, None);
+    assert_eq!(list(&p, &id, "tags"), ["mine", "theirs"], "an empty tag base was treated as no base");
+}
+
+#[test]
+fn t5_empty_blocking_base_is_a_base_not_no_base() {
+    init();
+    let p = project("t5f");
+    let a = seed(&p, "A", &[], None);
+    let b = seed(&p, "B", &[], None);
+    let id = seed(&p, "Blocks nothing yet", &[], None);
+    let _opened = get_bean(p.dir_str(), id.clone()).unwrap();
+    beans(&p.dir, &["update", &id, "--blocking", &a, "--json"], None);
+    save_lists(&p, &id, None, Some((&[b.as_str()], &[])), None);
+    let mut want = vec![a.clone(), b.clone()];
+    want.sort();
+    assert_eq!(list(&p, &id, "blocking"), want, "an empty blocking base was treated as no base");
+}
+
+#[test]
+fn t5_empty_blocked_by_base_is_a_base_not_no_base() {
+    init();
+    let p = project("t5g");
+    let a = seed(&p, "A", &[], None);
+    let b = seed(&p, "B", &[], None);
+    let id = seed(&p, "Blocked by nothing yet", &[], None);
+    let _opened = get_bean(p.dir_str(), id.clone()).unwrap();
+    beans(&p.dir, &["update", &id, "--blocked-by", &a, "--json"], None);
+    save_lists(&p, &id, None, None, Some((&[b.as_str()], &[])));
+    let mut want = vec![a.clone(), b.clone()];
+    want.sort();
+    assert_eq!(list(&p, &id, "blocked_by"), want, "an empty blocked_by base was treated as no base");
+}
