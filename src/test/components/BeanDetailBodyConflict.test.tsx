@@ -3,6 +3,7 @@
 // with the save all the way to the `update_bean` invoke.
 // The backend half is src-tauri/tests/t4_body_conflict.rs.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { ComponentProps } from 'react'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { invoke } from '@tauri-apps/api/core'
 import { BeanDetail } from '../../components/BeanDetail'
@@ -36,7 +37,9 @@ const props = {
   projectPath: '/project',
 }
 
-async function editBodyAndSave(onSave: ReturnType<typeof vi.fn>, typed: string) {
+type OnSave = NonNullable<ComponentProps<typeof BeanDetail>['onSave']>
+
+async function editBodyAndSave(onSave: OnSave, typed: string) {
   render(<BeanDetail {...props} onSave={onSave} />)
   fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }))
   fireEvent.change(screen.getByPlaceholderText(BODY_PLACEHOLDER), { target: { value: typed } })
@@ -47,13 +50,13 @@ describe('T4 body conflict (P.-2jcn)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('sends the body it started from with a body change', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined)
+    const onSave = vi.fn<OnSave>().mockResolvedValue(undefined)
     await editBodyAndSave(onSave, 'My careful edit.')
     expect(onSave).toHaveBeenCalledWith({ body: 'My careful edit.', expectBody: 'Base body.' })
   })
 
   it('keeps the typed body, stays in edit mode and explains on CONFLICT', async () => {
-    const onSave = vi.fn().mockRejectedValue({ code: 'CONFLICT', message: 'This bean changed on disk.' })
+    const onSave = vi.fn<OnSave>().mockRejectedValue({ code: 'CONFLICT', message: 'This bean changed on disk.' })
     await editBodyAndSave(onSave, 'My careful edit.')
     expect(onSave).toHaveBeenCalledTimes(1)
     expect(screen.getByPlaceholderText(BODY_PLACEHOLDER)).toHaveValue('My careful edit.')
@@ -62,7 +65,7 @@ describe('T4 body conflict (P.-2jcn)', () => {
   })
 
   it('control: a successful body save leaves edit mode', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined)
+    const onSave = vi.fn<OnSave>().mockResolvedValue(undefined)
     await editBodyAndSave(onSave, 'Saved fine.')
     expect(screen.queryByRole('button', { name: /^Save$/i })).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText(BODY_PLACEHOLDER)).not.toBeInTheDocument()

@@ -26,6 +26,9 @@ fn update(p: &Project, id: &str, f: impl FnOnce(&mut Upd)) {
         u.blocking,
         u.blocked_by,
         u.expect_body,
+        u.expect_tags,
+        u.expect_blocking,
+        u.expect_blocked_by,
     )
     .unwrap_or_else(|e| panic!("update_bean {id}: {e:?}"));
 }
@@ -41,6 +44,9 @@ struct Upd {
     blocking: Option<Vec<String>>,
     blocked_by: Option<Vec<String>>,
     expect_body: Option<String>,
+    expect_tags: Option<Vec<String>>,
+    expect_blocking: Option<Vec<String>>,
+    expect_blocked_by: Option<Vec<String>>,
 }
 
 fn s(v: &str) -> Option<String> {

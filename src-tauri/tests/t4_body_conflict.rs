@@ -8,7 +8,7 @@ use app_lib::commands::{get_bean, update_bean};
 use common::*;
 
 fn save_body(p: &Project, id: &str, body: &str, base: &str) -> Result<app_lib::beans::Bean, app_lib::beanscli::BeansCliError> {
-    update_bean(p.dir_str(), id.into(), None, None, None, Some(body.into()), None, None, None, None, Some(base.into()))
+    update_bean(p.dir_str(), id.into(), None, None, None, Some(body.into()), None, None, None, None, Some(base.into()), None, None, None)
 }
 
 #[test]
