@@ -15,7 +15,6 @@ const mockBean: Bean = {
   parent: null,
   tags: ['bug', 'frontend'],
   priority: null,
-  assignee: 'alice',
   created_at: '2024-03-01T00:00:00Z',
   updated_at: '2024-03-15T00:00:00Z',
   body: 'This is the bean body.',

@@ -33,7 +33,7 @@ impl FileWatcher {
             notify::RecommendedWatcher::new(tx, notify::Config::default())
                 .map_err(|e| format!("Failed to create watcher: {}", e))?;
 
-        let beans_path = PathBuf::from(&watch_path).join(".beans");
+        let beans_path = beans_watch_path(std::path::Path::new(&watch_path));
         watcher
             .watch(&beans_path, RecursiveMode::Recursive)
             .map_err(|e| format!("Failed to watch path {}: {}", beans_path.display(), e))?;
@@ -140,9 +140,10 @@ pub const BEANS_CHANGED_EVENT: &str = "beans-changed";
 /// Debounce interval in milliseconds (beanstalk-7fyf).
 pub const DEBOUNCE_MS: u64 = 500;
 
-/// Return the `.beans/` subdirectory path for a given project root (beanstalk-0om0).
+/// Return the directory holding a project's beans, as its `.beans.yml` says
+/// (`<project>/.beans` by default) (beanstalk-0om0).
 pub fn beans_watch_path(project_path: &std::path::Path) -> PathBuf {
-    project_path.join(".beans")
+    crate::commands::store_dir(project_path)
 }
 
 /// Return true for file extensions that should trigger a `beans-changed` event

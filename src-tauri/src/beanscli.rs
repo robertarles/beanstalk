@@ -1,12 +1,10 @@
 // beanstalk-dg1m: delegate bean writes to the `beans` binary.
 //
-// Beanstalk reads bean files with its own parser but must never write them
-// itself: the format belongs to `beans`, and every reimplementation drifts.
+// Beanstalk reads and writes beans only through the `beans` binary: the format
+// belongs to `beans`, and every reimplementation drifts.
 // `create_bean`/`update_bean` previously rebuilt files from a hardcoded
 // template, which silently rewrote the id comment into an `id:` key, quoted
 // titles the CLI leaves bare, and injected `tags: []`.
-//
-// Read liberally, write only through beans.
 
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -52,13 +50,13 @@ impl BeansCliError {
         BeansCliError { code: code.to_string(), message: message.into() }
     }
 
-    /// The binary could not be found. Writes are disabled; reads are unaffected,
-    /// and the external editor stays available.
+    /// The binary could not be found. Reads and writes are disabled, since both
+    /// go through it; the external editor stays available.
     pub fn unavailable() -> Self {
         BeansCliError::new(
             "BEANS_UNAVAILABLE",
-            "The `beans` CLI was not found. Beanstalk writes bean files through \
-             it, so editing is disabled. Install beans or set `beans_bin` in the \
+            "The `beans` CLI was not found. Beanstalk reads and writes beans through \
+             it, so nothing can be shown or edited. Install beans or set `beans_bin` in the \
              Beanstalk config. The external editor still works.",
         )
     }
@@ -167,18 +165,13 @@ struct FailureEnvelope {
 
 /// Run `beans` against a project, optionally streaming a body on stdin.
 ///
-/// Two separate things have to be pinned, and pinning only one is a trap:
-///
-/// - **Working directory** is set to the project so `beans` finds *that*
-///   project's `.beans.yml`. Config is resolved by searching upward from the
-///   cwd, so without this a created bean silently takes whatever `prefix` some
-///   ancestor directory happens to declare. Measured: creating into a probe
-///   directory from this repo's cwd minted a `beanstalk-` id instead of the
-///   probe project's own prefix.
-/// - **`--beans-path`** forces the data directory to where Beanstalk actually
-///   reads from, which is always `<project>/.beans`. Beanstalk ignores the
-///   `path:` key in `.beans.yml`, so honouring it here would write somewhere
-///   the reader never looks.
+/// The working directory is set to the project so `beans` finds *that*
+/// project's `.beans.yml`. Config is resolved by searching upward from the cwd,
+/// so without this a created bean silently takes whatever `prefix` some ancestor
+/// directory happens to declare. Measured: creating into a probe directory from
+/// this repo's cwd minted a `beanstalk-` id instead of the probe project's own
+/// prefix. Where the data lives is left to `beans` and the project's `path:`;
+/// forcing it would write somewhere other than where `beans` itself reads.
 ///
 /// `stdin_body` lets a body be streamed rather than passed in argv: it avoids
 /// any escaping question, since `Command` does not involve a shell.
@@ -189,19 +182,26 @@ pub fn run_beans(
 ) -> Result<String, BeansCliError> {
     let configured = crate::config::load_config().beans_bin;
     let bin = resolve_beans_bin(configured.as_deref()).ok_or_else(BeansCliError::unavailable)?;
-    let beans_dir = project_path.join(".beans");
+
+    // `beans` would otherwise search upward from here and adopt whatever
+    // project an ancestor directory belongs to, or fail with a message about a
+    // missing `.beans` directory that says nothing about what was wrong.
+    if !project_path.join(".beans.yml").is_file() {
+        return Err(BeansCliError::new(
+            "NOT_A_BEANS_PROJECT",
+            format!("not a beans project: no .beans.yml in {}", project_path.display()),
+        ));
+    }
 
     let mut cmd = Command::new(&bin);
     cmd.current_dir(project_path)
-        .arg("--beans-path")
-        .arg(&beans_dir)
         .args(args)
         .arg("--json")
         .stdin(if stdin_body.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    log::debug!("run_beans: cd {:?}; {:?} --beans-path {:?} {:?} --json", project_path, bin, beans_dir, args);
+    log::debug!("run_beans: cd {:?}; {:?} {:?} --json", project_path, bin, args);
 
     let mut child = cmd.spawn().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {

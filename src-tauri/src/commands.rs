@@ -1,26 +1,138 @@
 // Tauri commands for bean CRUD operations (beanstalk-v5m3)
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
-use crate::beans::{scan_beans_directory, build_tree, Bean};
+use crate::beans::{build_tree, Bean};
 use crate::beanscli::{diff_list_args, run_beans, BeansCliError};
 
 // ── Read commands (beanstalk-h9hz) ──────────────────────────────────────────
+//
+// Reads go through `beans list --json --full` and `beans show --json`, so what
+// is shown is what `beans` reports and each project's `.beans.yml` is honoured.
 
-#[tauri::command]
-pub fn get_beans(project_path: String) -> Result<Vec<Bean>, String> {
-    let path = Path::new(&project_path);
-    let flat = scan_beans_directory(path).map_err(|e| e.to_string())?;
-    Ok(build_tree(flat))
+/// The bean shape `beans` prints, shared by `list`, `show` and the write results.
+#[derive(Debug, serde::Deserialize)]
+struct CliBean {
+    id: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    status: String,
+    #[serde(rename = "type", default)]
+    bean_type: String,
+    #[serde(default)]
+    priority: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    parent: Option<String>,
+    #[serde(default)]
+    blocking: Vec<String>,
+    #[serde(default)]
+    blocked_by: Vec<String>,
+    #[serde(default)]
+    body: String,
+    /// Relative to the store directory.
+    #[serde(default)]
+    path: String,
+    #[serde(default)]
+    created_at: Option<String>,
+    #[serde(default)]
+    updated_at: Option<String>,
+}
+
+/// Where the project's bean files live: `path:` from `.beans.yml`, relative to
+/// the project, defaulting to `.beans`. `beans` resolves it the same way.
+pub fn store_dir(project: &Path) -> PathBuf {
+    let cfg = crate::beans::parse_beans_config(project);
+    project.join(cfg.path.unwrap_or_else(|| ".beans".to_string()))
+}
+
+fn to_bean(project: &Path, c: CliBean) -> Bean {
+    Bean {
+        file_path: store_dir(project).join(&c.path).to_string_lossy().into_owned(),
+        id: c.id,
+        title: c.title,
+        status: c.status,
+        bean_type: c.bean_type,
+        parent: c.parent.filter(|s| !s.is_empty()),
+        tags: c.tags,
+        priority: c.priority.filter(|s| !s.is_empty()),
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+        body: c.body,
+        children: Vec::new(),
+        blocking: c.blocking,
+        blocked_by: c.blocked_by,
+    }
+}
+
+/// The list fields an edit is based on, as the UI last saw them.
+#[derive(Clone)]
+struct Snapshot {
+    tags: Vec<String>,
+    blocking: Vec<String>,
+    blocked_by: Vec<String>,
+}
+
+/// What this process last served for each bean, keyed by project and id.
+///
+/// The UI sends a tag or relation edit as the whole list it ended up with. The
+/// CLI applies adds and removes, so the list has to become a diff, and against
+/// what matters: diffed against a fresh read, an item someone else added since
+/// the edit began looks like one the user removed, and is removed. Diffed
+/// against the list the user started from, only the user's own changes are sent.
+static SNAPSHOTS: Mutex<Option<HashMap<(String, String), Snapshot>>> = Mutex::new(None);
+
+fn remember(project: &str, bean: &Bean) {
+    if let Ok(mut guard) = SNAPSHOTS.lock() {
+        guard.get_or_insert_with(HashMap::new).insert(
+            (project.to_string(), bean.id.clone()),
+            Snapshot { tags: bean.tags.clone(), blocking: bean.blocking.clone(), blocked_by: bean.blocked_by.clone() },
+        );
+    }
+}
+
+fn snapshot(project: &str, id: &str) -> Option<Snapshot> {
+    SNAPSHOTS.lock().ok()?.as_ref()?.get(&(project.to_string(), id.to_string())).cloned()
+}
+
+fn list_flat(project: &Path) -> Result<Vec<Bean>, BeansCliError> {
+    let out = run_beans(project, &["list".to_string(), "--full".to_string()], None)?;
+    if out.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let list: Vec<CliBean> = serde_json::from_str(&out)
+        .map_err(|e| BeansCliError::new("PARSE_FAILED", format!("could not read `beans list` output: {e}")))?;
+    // Archived beans are no longer active, so they are not shown.
+    let beans: Vec<Bean> = list
+        .into_iter()
+        .filter(|c| !c.path.starts_with("archive/"))
+        .map(|c| to_bean(project, c))
+        .collect();
+    let key = project.to_string_lossy();
+    for b in &beans {
+        remember(&key, b);
+    }
+    Ok(beans)
 }
 
 #[tauri::command]
-pub fn get_bean(project_path: String, bean_id: String) -> Result<Bean, String> {
+pub fn get_beans(project_path: String) -> Result<Vec<Bean>, BeansCliError> {
+    Ok(build_tree(list_flat(Path::new(&project_path))?))
+}
+
+#[tauri::command]
+pub fn get_bean(project_path: String, bean_id: String) -> Result<Bean, BeansCliError> {
     let path = Path::new(&project_path);
-    let flat = scan_beans_directory(path).map_err(|e| e.to_string())?;
-    flat.into_iter()
-        .find(|b| b.id == bean_id)
-        .ok_or_else(|| format!("Bean not found: {}", bean_id))
+    let out = run_beans(path, &["show".to_string(), bean_id.clone()], None)?;
+    let c: CliBean = serde_json::from_str(&out)
+        .map_err(|e| BeansCliError::new("PARSE_FAILED", format!("could not read `beans show {bean_id}` output: {e}")))?;
+    let bean = to_bean(path, c);
+    remember(&project_path, &bean);
+    Ok(bean)
 }
 
 // ── Create command (beanstalk-o6fz) ─────────────────────────────────────────
@@ -41,12 +153,6 @@ pub fn create_bean(
     blocking: Option<Vec<String>>,
     blocked_by: Option<Vec<String>>,
 ) -> Result<Bean, BeansCliError> {
-    // `beans` refuses a data directory that does not exist rather than creating
-    // one, so a first bean in a fresh project needs this.
-    let beans_dir = Path::new(&project_path).join(".beans");
-    std::fs::create_dir_all(&beans_dir)
-        .map_err(|e| BeansCliError::new("IO_FAILED", format!("could not create {beans_dir:?}: {e}")))?;
-
     let mut args: Vec<String> = vec!["create".to_string(), title];
     args.push("-s".to_string());
     args.push(status);
@@ -90,7 +196,7 @@ pub fn create_bean(
     let created: CreateEnvelope = serde_json::from_str(&out)
         .map_err(|e| BeansCliError::new("PARSE_FAILED", format!("could not read `beans create` output: {e}")))?;
 
-    get_bean(project_path, created.bean.id).map_err(|e| BeansCliError::new("READ_FAILED", e))
+    get_bean(project_path, created.bean.id)
 }
 
 /// Just enough of `beans create --json` to recover the minted id.
@@ -133,10 +239,17 @@ pub fn update_bean(
     blocked_by: Option<Vec<String>>,
     expect_body: Option<String>,
 ) -> Result<Bean, BeansCliError> {
-    // Read first: tags and relations are set incrementally by the CLI, so a
-    // "set this list" from the UI has to be diffed against what is on disk.
-    let existing = get_bean(project_path.clone(), bean_id.clone())
-        .map_err(|e| BeansCliError::new("READ_FAILED", e))?;
+    // Tags and relations are set incrementally by the CLI, so a "set this list"
+    // from the UI has to become adds and removes. The base is the lists the edit
+    // started from (see [`SNAPSHOTS`]), taken before the read below refreshes
+    // them; with none, that read is the base.
+    let base_lists = snapshot(&project_path, &bean_id);
+    let existing = get_bean(project_path.clone(), bean_id.clone())?;
+    let base = base_lists.unwrap_or_else(|| Snapshot {
+        tags: existing.tags.clone(),
+        blocking: existing.blocking.clone(),
+        blocked_by: existing.blocked_by.clone(),
+    });
 
     // Checked here rather than in the frontend so the window between reading and
     // writing is as small as it can be without the CLI's help.
@@ -180,13 +293,13 @@ pub fn update_bean(
         None => {}
     }
     if let Some(desired) = &tags {
-        args.extend(diff_list_args("--tag", "--remove-tag", &existing.tags, desired));
+        args.extend(diff_list_args("--tag", "--remove-tag", &base.tags, desired));
     }
     if let Some(desired) = &blocking {
-        args.extend(diff_list_args("--blocking", "--remove-blocking", &existing.blocking, desired));
+        args.extend(diff_list_args("--blocking", "--remove-blocking", &base.blocking, desired));
     }
     if let Some(desired) = &blocked_by {
-        args.extend(diff_list_args("--blocked-by", "--remove-blocked-by", &existing.blocked_by, desired));
+        args.extend(diff_list_args("--blocked-by", "--remove-blocked-by", &base.blocked_by, desired));
     }
 
     // Stream the body rather than passing it in argv: no escaping, no size limit.
@@ -206,9 +319,8 @@ pub fn update_bean(
 
     run_beans(Path::new(&project_path), &args, stdin_body)?;
 
-    // Re-read through Beanstalk's own parser rather than mapping the CLI's JSON,
-    // and by id rather than by path, so a future rename cannot strand us.
-    get_bean(project_path, bean_id).map_err(|e| BeansCliError::new("READ_FAILED", e))
+    // Re-read by id rather than by path, so a future rename cannot strand us.
+    get_bean(project_path, bean_id)
 }
 
 #[tauri::command]
@@ -229,9 +341,8 @@ pub fn search_beans(
     status_filter: Option<String>,
     assignee_filter: Option<String>,
     tag_filter: Option<String>,
-) -> Result<Vec<Bean>, String> {
-    let path = Path::new(&project_path);
-    let flat = scan_beans_directory(path).map_err(|e| e.to_string())?;
+) -> Result<Vec<Bean>, BeansCliError> {
+    let flat = list_flat(Path::new(&project_path))?;
 
     let query_lower = query.to_lowercase();
 
@@ -248,10 +359,8 @@ pub fn search_beans(
                 .map(|s| b.status.eq_ignore_ascii_case(s))
                 .unwrap_or(true);
 
-            let matches_assignee = assignee_filter
-                .as_ref()
-                .map(|a| b.assignee.as_deref().map(|ba| ba.eq_ignore_ascii_case(a)).unwrap_or(false))
-                .unwrap_or(true);
+            // beans has no assignee, so no bean can match an assignee filter.
+            let matches_assignee = assignee_filter.as_ref().map(|a| a.is_empty()).unwrap_or(true);
 
             let matches_tag = tag_filter
                 .as_ref()
@@ -475,8 +584,15 @@ fn open_with_app(app: &str, file_path: &str) -> Result<(), String> {
 
 #[tauri::command]
 pub fn open_bean_in_editor(project_path: String, bean_id: String) -> Result<(), String> {
-    let bean = get_bean(project_path, bean_id)?;
-    let file_path = &bean.file_path;
+    // The editor needs only the file, so it must not depend on `beans` running:
+    // when it cannot, the store is searched directly for the file (a read).
+    let file_path = &match get_bean(project_path.clone(), bean_id.clone()) {
+        Ok(b) => b.file_path,
+        Err(e) if e.code == "BEANS_UNAVAILABLE" => {
+            find_bean_file(&store_dir(Path::new(&project_path)), &bean_id).ok_or_else(|| e.to_string())?
+        }
+        Err(e) => return Err(e.to_string()),
+    };
 
     match resolve_editor_choice(crate::config::load_config().editor) {
         EditorChoice::Command(cmd) => launch_editor_command(&cmd, file_path),
@@ -495,6 +611,19 @@ pub fn open_bean_in_editor(project_path: String, bean_id: String) -> Result<(), 
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// The bean file for `id` in `store`, by `beans`' naming (`<id>--<slug>.md`).
+fn find_bean_file(store: &Path, id: &str) -> Option<String> {
+    let entries = std::fs::read_dir(store).ok()?;
+    entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            name.starts_with(&format!("{id}--")) || name == format!("{id}.md")
+        })
+        .map(|p| p.to_string_lossy().into_owned())
+}
 
 
 
@@ -539,7 +668,14 @@ mod tests {
                     .map(|d| d.subsec_nanos())
                     .unwrap_or(0)
             ));
-            fs::create_dir_all(&path).expect("create temp dir");
+            // A beans project, as `beans init` leaves it: reads and writes
+            // refuse a directory without a `.beans.yml`.
+            fs::create_dir_all(path.join(".beans")).expect("create temp dir");
+            fs::write(
+                path.join(".beans.yml"),
+                "beans:\n    path: .beans\n    prefix: bean-\n    id_length: 4\n    default_status: todo\n    default_type: task\n",
+            )
+            .expect("write .beans.yml");
             TempDir { path }
         }
 
@@ -905,8 +1041,6 @@ mod tests {
     #[test]
     fn test_get_bean_not_found() {
         let tmp = TempDir::new("get_bean_not_found");
-        // Create the .beans directory so scan_beans_directory does not fail.
-        fs::create_dir_all(tmp.path().join(".beans")).unwrap();
 
         let result = get_bean(
             tmp.path().to_string_lossy().to_string(),
@@ -916,7 +1050,7 @@ mod tests {
         assert!(result.is_err(), "get_bean should return Err for unknown id");
         let err = result.unwrap_err();
         assert!(
-            err.contains("nonexistent-id-1234"),
+            err.message.contains("nonexistent-id-1234"),
             "error message should contain the unknown id, got: {}",
             err
         );
@@ -1542,9 +1676,8 @@ mod tests {
             content
         );
 
-        assert!(
-            bean.priority.is_none(),
-            "returned Bean.priority should be None when not set"
-        );
+        // The file has no priority line, but `beans show` reports the default
+        // (`normal`), and Beanstalk shows what `beans` reports.
+        assert_eq!(bean.priority.as_deref(), Some("normal"));
     }
 }

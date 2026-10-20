@@ -19,7 +19,6 @@ const bean: Bean = {
   parent: null,
   tags: [],
   priority: null,
-  assignee: null,
   created_at: '2026-10-20T00:00:00Z',
   updated_at: '2026-10-20T00:00:00Z',
   body: 'Base body.',

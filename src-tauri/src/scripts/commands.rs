@@ -29,7 +29,7 @@ pub fn run_bean_script(
         .find(|s| s.id == script_id)
         .ok_or_else(|| format!("Script not found: {script_id}"))?;
 
-    let bean = crate::commands::get_bean(project_path.clone(), bean_id)?;
+    let bean = crate::commands::get_bean(project_path.clone(), bean_id).map_err(|e| e.to_string())?;
 
     run_script(&script, &bean, &project_path)
 }

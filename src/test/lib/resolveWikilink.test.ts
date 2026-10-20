@@ -18,7 +18,6 @@ function bean(id: string, overrides: Partial<Bean> = {}): Bean {
     parent: null,
     tags: [],
     priority: null,
-    assignee: null,
     created_at: null,
     updated_at: null,
     body: '',

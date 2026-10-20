@@ -312,7 +312,8 @@ fn script_env(bean: &crate::beans::Bean, project_path: &str) -> Vec<(String, Str
         ("BEAN_TYPE".into(), bean.bean_type.clone()),
         ("BEAN_PARENT".into(), opt(&bean.parent)),
         ("BEAN_PRIORITY".into(), opt(&bean.priority)),
-        ("BEAN_ASSIGNEE".into(), opt(&bean.assignee)),
+        // beans has no assignee; kept as "" so existing scripts keep working.
+        ("BEAN_ASSIGNEE".into(), String::new()),
         ("BEAN_CREATED_AT".into(), opt(&bean.created_at)),
         ("BEAN_UPDATED_AT".into(), opt(&bean.updated_at)),
         ("BEAN_TAGS".into(), bean.tags.join(",")),
@@ -479,7 +480,6 @@ mod tests {
             parent: Some("beanstalk-root".into()),
             tags: vec!["ui".into(), "urgent".into()],
             priority: Some("high".into()),
-            assignee: None,
             created_at: Some("2026-01-01T00:00:00Z".into()),
             updated_at: None,
             body: "The body".into(),
@@ -722,7 +722,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn absent_optional_fields_become_empty_strings() {
-        // `assignee` is None; the script must see "" rather than an inherited value.
+        // `BEAN_ASSIGNEE` is always empty; the script must see "" rather than an inherited value.
         let tmp = TempDir::new("emptyenv");
         let out = run_fixture(
             &tmp,

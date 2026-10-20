@@ -60,7 +60,6 @@ export const searchBeans = (
   filters?: {
     status?: string;
     beanType?: string;
-    assignee?: string;
     tags?: string[];
   }
 ) => invoke<Bean[]>('search_beans', { projectPath, query, ...filters });

@@ -10,7 +10,6 @@ const bean: Bean = {
   parent: 'beanstalk-parent',
   tags: ['alpha', 'beta'],
   priority: 'high',
-  assignee: 'robert',
   created_at: null,
   updated_at: null,
   body: 'Original body.',
@@ -105,11 +104,5 @@ describe('changedFields (beanstalk-c57u)', () => {
     expect(
       changedFields(bean, { ...pristine, title: 'New', status: 'draft', tags: [] })
     ).toEqual({ title: 'New', status: 'draft', tags: [] })
-  })
-
-  it('never reports assignee, which beans cannot store', () => {
-    // beans has no assignee field, so it must never reach a write payload.
-    expect(changedFields(bean, pristine)).not.toHaveProperty('assignee')
-    expect(changedFields(bean, { ...pristine, title: 'New' })).not.toHaveProperty('assignee')
   })
 })

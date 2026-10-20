@@ -14,7 +14,6 @@ const mockCreatedBean: Bean = {
   parent: null,
   tags: [],
   priority: null,
-  assignee: null,
   created_at: '2024-03-01T00:00:00Z',
   updated_at: null,
   body: '',

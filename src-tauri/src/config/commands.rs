@@ -40,13 +40,10 @@ pub fn add_project(path: String) -> Result<AppConfig, String> {
     // Normalize to project root in case the user passed a path inside .beans/.
     let path = normalize_project_path(&path);
 
-    // Validate that path/.beans/ directory exists
-    let beans_dir = Path::new(&path).join(".beans");
-    if !beans_dir.is_dir() {
-        return Err(format!(
-            "Not a valid Beanstalk project: .beans/ directory not found in {}",
-            path
-        ));
+    // A beans project is a directory with a `.beans.yml`; where its beans live
+    // is that file's business (`path:`), so a `.beans/` directory proves nothing.
+    if !Path::new(&path).join(".beans.yml").is_file() {
+        return Err(format!("Not a beans project: no .beans.yml in {}", path));
     }
 
     // Derive name from last path component

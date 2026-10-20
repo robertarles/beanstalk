@@ -22,7 +22,6 @@ function bean(id: string, title = `Bean ${id}`): Bean {
     parent: null,
     tags: [],
     priority: null,
-    assignee: null,
     created_at: null,
     updated_at: null,
     body: '',

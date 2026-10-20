@@ -626,8 +626,8 @@ export const BeanDetail = memo(function BeanDetail({
         {/*
           No Assignee input: `beans` has no assignee field, and Beanstalk writes
           only through it (beanstalk-dg1m), so an input here could not persist.
-          The value is still parsed and shown in view mode, and the external
-          editor can still set it. See beanstalk-mlm7.
+          The value is no longer read or shown either: reads go through `beans`,
+          which does not report it. See beanstalk-mlm7.
         */}
 
         {/* Body */}
@@ -789,16 +789,6 @@ export const BeanDetail = memo(function BeanDetail({
           ))}
         </select>
       </div>
-
-      {/* Assignee */}
-      {bean.assignee && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20 shrink-0">
-            Assignee
-          </span>
-          <span className="text-sm text-gray-700 dark:text-gray-300">👤 {bean.assignee}</span>
-        </div>
-      )}
 
       {/* Tags */}
       {bean.tags && bean.tags.length > 0 && (

@@ -12,7 +12,6 @@ describe('Bean interface', () => {
       parent: null,
       tags: ['test'],
       priority: null,
-      assignee: 'alice',
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-02T00:00:00Z',
       body: 'Body text here.',
@@ -28,7 +27,6 @@ describe('Bean interface', () => {
     expect(bean.bean_type).toBe('task')
     expect(bean.parent).toBeNull()
     expect(bean.tags).toEqual(['test'])
-    expect(bean.assignee).toBe('alice')
     expect(bean.created_at).toBe('2024-01-01T00:00:00Z')
     expect(bean.updated_at).toBe('2024-01-02T00:00:00Z')
     expect(bean.body).toBe('Body text here.')

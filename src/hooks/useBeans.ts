@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { Bean } from '../types/beans';
 import { getBeans } from '../lib/tauri';
+import { asBeansError } from '../lib/beansError';
 
 interface UseBeansResult {
   beans: Bean[];
@@ -41,7 +42,7 @@ export function useBeans(projectPath: string | null): UseBeansResult {
       setBeans(result);
       setLastRefreshed(Date.now());
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(asBeansError(err).message);
       setBeans([]);
     } finally {
       setLoading(false);

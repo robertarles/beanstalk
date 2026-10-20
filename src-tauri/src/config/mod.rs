@@ -261,17 +261,17 @@ mod tests {
     #[test]
     fn test_add_project_invalid_path() {
         let dir = temp_dir("add_invalid");
-        // dir exists but has no .beans/ subdirectory
+        // dir exists but has no .beans.yml
         let path_str = dir.to_string_lossy().into_owned();
         let result = super::commands::add_project(path_str);
-        assert!(result.is_err(), "should fail when .beans/ dir is absent");
+        assert!(result.is_err(), "should fail when .beans.yml is absent");
     }
 
     #[test]
     fn test_add_project_deduplication() {
         let dir = temp_dir("add_dedup");
-        // Create required .beans/ dir
-        fs::create_dir_all(dir.join(".beans")).unwrap();
+        // A beans project is a directory with a .beans.yml
+        fs::write(dir.join(".beans.yml"), "beans:\n    path: .beans\n").unwrap();
 
         // Also set up a temp config path so we don't pollute real config.
         // add_project calls load_config() / save_config() which use the real
