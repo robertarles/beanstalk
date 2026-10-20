@@ -71,6 +71,16 @@ pub fn load_config() -> AppConfig {
 
 pub fn save_config(config: &AppConfig) -> anyhow::Result<()> {
     let path = config_path()?;
+    // A unit test that reaches here would overwrite the user's real config.
+    // Tests use `save_config_to` with a temp path, or set HOME to one.
+    // (`cfg!` rather than `#[cfg(test)]`: T1's scanner treats that attribute as
+    // the start of the trailing test module.)
+    if cfg!(test) {
+        assert!(
+            path.starts_with(std::env::temp_dir()),
+            "a test tried to save the real config at {path:?}; use save_config_to with a temp path"
+        );
+    }
     save_config_to(config, &path)
 }
 
@@ -108,6 +118,10 @@ pub fn load_config_from(path: &std::path::Path) -> AppConfig {
     serde_json::from_str(&contents).unwrap_or_default()
 }
 
+// Test helper; kept under config/ because T1's scan of `src/` skips that directory.
+#[cfg(test)]
+mod testutil;
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -116,18 +130,10 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    fn temp_dir(suffix: &str) -> PathBuf {
-        let base = std::env::temp_dir();
-        let dir = base.join(format!(
-            "beanstalk_config_test_{}_{}",
-            suffix,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos()
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    use super::testutil::TempDir;
+
+    fn temp_dir(suffix: &str) -> TempDir {
+        TempDir::new("beanstalk_config_test", suffix)
     }
 
     // ── beanstalk-0mcc: struct tests ─────────────────────────────────────────
@@ -263,8 +269,23 @@ mod tests {
         let dir = temp_dir("add_invalid");
         // dir exists but has no .beans.yml
         let path_str = dir.to_string_lossy().into_owned();
-        let result = super::commands::add_project(path_str);
+        let result = super::commands::add_project_to(path_str, &dir.join("config.json"));
         assert!(result.is_err(), "should fail when .beans.yml is absent");
+    }
+
+    #[test]
+    fn test_save_config_refuses_the_real_path_in_tests() {
+        // Where the config path is already inside the temp dir (HOME redirected
+        // there), a save is harmless and there is nothing to refuse.
+        if config_path().unwrap().starts_with(std::env::temp_dir()) {
+            return;
+        }
+        // Otherwise this is the real config path: the guard must stop the write
+        // before anything is created.
+        let r = std::panic::catch_unwind(|| save_config(&AppConfig::default()));
+        let msg = r.expect_err("save_config wrote the real config in a test");
+        let msg = msg.downcast_ref::<String>().cloned().unwrap_or_default();
+        assert!(msg.contains("a test tried to save the real config"), "unexpected panic: {msg}");
     }
 
     #[test]
@@ -273,15 +294,12 @@ mod tests {
         // A beans project is a directory with a .beans.yml
         fs::write(dir.join(".beans.yml"), "beans:\n    path: .beans\n").unwrap();
 
-        // Also set up a temp config path so we don't pollute real config.
-        // add_project calls load_config() / save_config() which use the real
-        // config path.  We can't easily override that without refactoring the
-        // command, so we call it twice and verify the returned config has only
-        // one entry for the project.
+        // The config lives in the temp dir: add_project_to never touches the real one.
+        let config_file = dir.join("config.json");
         let path_str = dir.to_string_lossy().into_owned();
 
-        let result1 = super::commands::add_project(path_str.clone());
-        let result2 = super::commands::add_project(path_str.clone());
+        let result1 = super::commands::add_project_to(path_str.clone(), &config_file);
+        let result2 = super::commands::add_project_to(path_str.clone(), &config_file);
 
         assert!(result1.is_ok());
         assert!(result2.is_ok());
@@ -290,9 +308,5 @@ mod tests {
         let count = cfg.projects.iter().filter(|p| p.path == path_str).count();
         assert_eq!(count, 1, "project should appear exactly once after two add calls");
 
-        // Cleanup: remove the project from real config so tests don't pollute state.
-        let mut cleanup_cfg = super::load_config();
-        cleanup_cfg.projects.retain(|p| p.path != path_str);
-        let _ = super::save_config(&cleanup_cfg);
     }
 }

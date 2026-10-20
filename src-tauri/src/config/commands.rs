@@ -1,6 +1,6 @@
 // beanstalk-dhgw: Tauri commands with validation
 
-use super::{load_config, save_config, AppConfig, Project};
+use super::{load_config, load_config_from, save_config, save_config_to, AppConfig, Project};
 use crate::beans::parse_beans_config;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -37,6 +37,13 @@ fn normalize_project_path(path: &str) -> String {
 
 #[tauri::command]
 pub fn add_project(path: String) -> Result<AppConfig, String> {
+    let config_file = super::config_path().map_err(|e| e.to_string())?;
+    add_project_to(path, &config_file)
+}
+
+/// [`add_project`] against an explicit config file, so tests never touch the
+/// user's real one.
+pub fn add_project_to(path: String, config_file: &Path) -> Result<AppConfig, String> {
     // Normalize to project root in case the user passed a path inside .beans/.
     let path = normalize_project_path(&path);
 
@@ -53,7 +60,7 @@ pub fn add_project(path: String) -> Result<AppConfig, String> {
         .unwrap_or(&path)
         .to_string();
 
-    let mut config = load_config();
+    let mut config = load_config_from(config_file);
 
     // Maintain recents list: move path to front, deduplicate, cap at 10
     config.recent_projects.retain(|p| p != &path);
@@ -65,7 +72,7 @@ pub fn add_project(path: String) -> Result<AppConfig, String> {
         config.projects.push(Project { path, name });
     }
 
-    save_config(&config).map_err(|e| e.to_string())?;
+    save_config_to(&config, config_file).map_err(|e| e.to_string())?;
 
     Ok(config)
 }
@@ -155,14 +162,14 @@ mod prefix_tests {
     use super::*;
     use std::fs;
 
-    fn temp_project(tag: &str, yml: Option<&str>) -> String {
-        let dir = std::env::temp_dir().join(format!("beanstalk_prefix_{tag}_{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
+    fn temp_project(tag: &str, yml: Option<&str>) -> (super::super::testutil::TempDir, String) {
+        let dir = super::super::testutil::TempDir::new("beanstalk_prefix", tag);
         fs::create_dir_all(dir.join(".beans")).unwrap();
         if let Some(body) = yml {
             fs::write(dir.join(".beans.yml"), body).unwrap();
         }
-        dir.to_string_lossy().to_string()
+        let path = dir.to_string_lossy().to_string();
+        (dir, path)
     }
 
     fn project(path: String, name: &str) -> Project {
@@ -171,22 +178,22 @@ mod prefix_tests {
 
     #[test]
     fn reads_the_declared_prefix() {
-        let path = temp_project("declared", Some("beans:\n    prefix: hivelens-\n"));
+        let (_guard, path) = temp_project("declared", Some("beans:\n    prefix: hivelens-\n"));
         let out = project_prefixes(vec![project(path.clone(), "hivelens")]);
         assert_eq!(out, vec![ProjectPrefix { path, name: "hivelens".into(), prefix: "hivelens-".into() }]);
     }
 
     #[test]
     fn falls_back_to_the_same_default_create_bean_uses() {
-        let path = temp_project("nodefault", None);
+        let (_guard, path) = temp_project("nodefault", None);
         let out = project_prefixes(vec![project(path, "plain")]);
         assert_eq!(out[0].prefix, DEFAULT_PREFIX);
     }
 
     #[test]
     fn keeps_duplicates_so_callers_can_see_a_collision() {
-        let a = temp_project("dupa", Some("beans:\n    prefix: shared-\n"));
-        let b = temp_project("dupb", Some("beans:\n    prefix: shared-\n"));
+        let (_ga, a) = temp_project("dupa", Some("beans:\n    prefix: shared-\n"));
+        let (_gb, b) = temp_project("dupb", Some("beans:\n    prefix: shared-\n"));
         let out = project_prefixes(vec![project(a, "a"), project(b, "b")]);
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].prefix, "shared-");
