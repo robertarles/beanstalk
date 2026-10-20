@@ -323,7 +323,7 @@ fn script_env(bean: &crate::beans::Bean, project_path: &str) -> Vec<(String, Str
         ("BEANSTALK_PROJECT_PATH".into(), project_path.to_string()),
         (
             "BEANSTALK_BEANS_DIR".into(),
-            Path::new(project_path).join(".beans").to_string_lossy().into_owned(),
+            crate::commands::store_dir(Path::new(project_path)).to_string_lossy().into_owned(),
         ),
         ("BEANSTALK_VERSION".into(), env!("CARGO_PKG_VERSION").to_string()),
     ]
@@ -693,6 +693,25 @@ mod tests {
         fs::write(&bean_file, "---\n---\n").unwrap();
         let bean = sample_bean(bean_file.to_str().unwrap());
         run_script(script, &bean, tmp.path().to_str().unwrap()).expect("run")
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn beans_dir_follows_the_projects_beans_yml() {
+        // `path:` in .beans.yml puts the store outside the project; the script
+        // must be told where the beans really are, not `<project>/.beans`.
+        let tmp = TempDir::new("beansdir");
+        fs::write(tmp.path().join(".beans.yml"), "beans:\n    path: ../store\n").unwrap();
+        let out = run_fixture(&tmp, "#!/bin/sh\n# beanstalk-name: Dir\necho \"$BEANSTALK_BEANS_DIR\"\n");
+        assert_eq!(out.stdout.trim(), tmp.path().join("../store").to_string_lossy());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn beans_dir_defaults_to_dot_beans() {
+        let tmp = TempDir::new("beansdirdef");
+        let out = run_fixture(&tmp, "#!/bin/sh\n# beanstalk-name: Dir\necho \"$BEANSTALK_BEANS_DIR\"\n");
+        assert_eq!(out.stdout.trim(), tmp.path().join(".beans").to_string_lossy());
     }
 
     #[cfg(unix)]
