@@ -152,18 +152,22 @@ script.
 
 ## Editing Beans
 
-Beanstalk reads bean files with its own parser but **writes them only through the
-`beans` CLI**. The file format belongs to beans, and every reimplementation drifts
-from it, so there is exactly one writer.
+Beanstalk **reads and writes beans only through the `beans` CLI**: lists come from
+`beans list --json --full`, a single bean from `beans show --json`, and every edit
+is a `beans create` or `beans update`. The file format belongs to beans, and every
+reimplementation drifts from it. Each project's `.beans.yml` is honoured, including
+a `path:` that puts the store outside the project.
 
 Two consequences worth knowing:
 
-- **Editing needs `beans` on your `PATH`** (or a `beans_bin` path in the Beanstalk
-  config). Without it, Edit, Touch, the status dropdown and new-bean creation are
-  disabled, and the reason is shown on the disabled control. Reading is unaffected.
-- **The external editor is never gated.** `e`, and the `Editor ↗` button, launch
-  your editor and write nothing through Beanstalk, so they keep working when the
-  CLI is missing — and they can write frontmatter that beans does not model.
+- **Nothing works without `beans`** (see
+  [Prerequisite: the `beans` CLI](#prerequisite-the-beans-cli)). Reads fail with
+  `BEANS_UNAVAILABLE`, so no beans are shown, and every write is refused without
+  touching the store. Edit and Touch are disabled, with the reason on the control.
+- **The external editor is never gated.** `e`, and the `Edit ↗` button
+  (`Editor ↗` while editing inline), launch your editor and write nothing through
+  Beanstalk, so they still open the file when the CLI is missing — and they can
+  write frontmatter that beans does not model.
 
 There are two ways to edit a body:
 
@@ -175,16 +179,18 @@ There are two ways to edit a body:
 | Can write unmodelled frontmatter | no | yes |
 
 A save writes **only the fields you changed**; anything untouched is left exactly
-as it is on disk. Saving with nothing changed writes nothing — use `Touch` to bump
-`updated_at` deliberately.
+as it is on disk. Tag, blocking and blocked-by edits are sent as adds and removes
+against the lists **as they were when you started editing**, so an item someone
+else added in the meantime survives. Saving with nothing changed writes nothing —
+use `Touch` to bump `updated_at` deliberately.
 
-If a bean changes on disk while you have it open for editing, Beanstalk says so,
-and a body save is **refused** rather than overwriting the other change. Your text
-stays in the form; reload or reconcile in the external editor.
+If a bean's body changes on disk while you have it open for editing, Beanstalk says
+so, and a body save is **refused** rather than overwriting the other change. Your
+text stays in the form; reload or reconcile in the external editor.
 
-> **No assignee field.** beans has no assignee, so Beanstalk cannot persist one.
-> An `assignee:` key already in a file is still read and displayed, and the
-> external editor can still set one — but any save through Beanstalk drops it,
+> **No assignee field.** beans has no assignee, so Beanstalk neither shows nor
+> saves one, and scripts get an empty `BEAN_ASSIGNEE`. An `assignee:` key set in
+> the external editor is not displayed, and any save through Beanstalk drops it,
 > because beans rewrites frontmatter it does not model. Custom data belongs in the
 > **body**, which beans preserves verbatim.
 
