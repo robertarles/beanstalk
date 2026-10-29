@@ -8,6 +8,94 @@ tags:
 
 A GUI for Beans issue tracking
 
+## Install
+
+Download the file for your platform from the
+[latest release](https://github.com/robertarles/beanstalk/releases/latest).
+
+| Platform                      | File                                  |
+| ----------------------------- | ------------------------------------- |
+| macOS (Apple Silicon + Intel) | `Beanstalk_<version>_universal.dmg`   |
+| Linux, any distro             | `*.AppImage`                          |
+| Debian / Ubuntu               | `*.deb`                               |
+| Fedora / RHEL / openSUSE      | `*.rpm`                               |
+
+Linux files come in `amd64`/`x86_64` (most PCs) and `arm64`/`aarch64` (ARM
+machines) variants. `uname -m` tells you which you have.
+
+### Prerequisite: the `beans` CLI
+
+Beanstalk reads and writes beans **through the
+[`beans`](https://github.com/hmans/beans) CLI**, so install `beans` first. Without
+it, no beans are shown; only the external editor still works. Beanstalk finds it on `PATH`, or in `~/.local/bin`,
+`/usr/local/bin`, `/usr/bin` or `/opt/homebrew/bin`. If yours is elsewhere (for
+example `~/go/bin` after `go install`), set `"beans_bin"` in the Beanstalk config
+file:
+
+- macOS: `~/Library/Application Support/Beanstalk/config.json`
+- Linux: `~/.config/Beanstalk/config.json`
+
+```json
+{ "beans_bin": "~/go/bin/beans" }
+```
+
+### Installing on macOS
+
+Beanstalk is **not yet signed by Apple**, so macOS blocks it the first time you
+open it. This is a one-time step; after it, Beanstalk opens normally.
+
+1. Open the `.dmg` and drag **Beanstalk** into **Applications**.
+2. Open Beanstalk from Applications. macOS says it *"cannot verify that Beanstalk
+   is free of malware"* (or *"Apple could not verify…"*). Click **Done** (or
+   **OK**). Don't click **Move to Trash**.
+3. Open **System Settings → Privacy & Security** and scroll down to the
+   **Security** section. You'll see *"Beanstalk was blocked to protect your Mac."*
+   Click **Open Anyway** and confirm with your password or Touch ID.
+4. Open Beanstalk again and click **Open** in the final prompt.
+
+On macOS 14 (Sonoma) and earlier, you can instead **right-click** (or
+Control-click) Beanstalk in Applications, choose **Open**, then click **Open**
+in the dialog.
+
+**Terminal alternative.** If you prefer, or if macOS says the app *"is damaged
+and can't be opened"*, remove the download quarantine flag instead:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Beanstalk.app
+```
+
+Both methods only tell macOS to trust this one app. They don't change any
+system-wide security setting.
+
+### Installing on Linux
+
+**AppImage** (any distro, no install):
+
+```sh
+chmod +x Beanstalk_*.AppImage
+./Beanstalk_*.AppImage
+```
+
+**Debian / Ubuntu:**
+
+```sh
+sudo apt install ./beanstalk_*.deb
+```
+
+**Fedora / RHEL:**
+
+```sh
+sudo dnf install ./beanstalk-*.rpm
+```
+
+### Building from source / cutting a release
+
+`make help` lists the targets. To publish a release, bump `version` in both
+`src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit and push to `main`,
+then run `make release`. That pushes a `v<version>` tag, and GitHub Actions
+builds every installer into a **draft** release. Review it and publish it on
+GitHub.
+
 ## Keyboard Shortcuts
 
 Shortcuts are disabled when the cursor is inside a text input, textarea, or select.

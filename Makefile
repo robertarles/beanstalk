@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help all clean build test coverage report-index install build-fedora install-fedora
+.PHONY: help all clean build test coverage report-index install build-fedora install-fedora release
 
 # ── Report locations (generated; gitignored — see CONTRIBUTING.md) ────────────
 REPORTS       := reports
@@ -125,3 +125,27 @@ install-fedora: build-fedora ## Build and install the rpm (run on the Fedora hos
 		echo "Installing $$nvra from $$rpmfile"; \
 		sudo dnf install -y "$$rpmfile"; \
 	fi
+
+# ── Release ───────────────────────────────────────────────────────────────────
+# Tags the current commit and pushes the tag; .github/workflows/release.yml then
+# builds macOS + Linux installers into a DRAFT GitHub Release for review.
+# Bump "version" in src-tauri/tauri.conf.json AND src-tauri/Cargo.toml first.
+APP_VERSION   := $(shell sed -n 's/^  "version": "\(.*\)",$$/\1/p' src-tauri/tauri.conf.json)
+CARGO_VERSION := $(shell sed -n 's/^version = "\(.*\)"$$/\1/p' src-tauri/Cargo.toml | head -1)
+
+release: ## Tag v<version> and push it; CI builds installers into a draft GitHub Release
+	@[ -n "$(APP_VERSION)" ] || { echo "Could not read version from src-tauri/tauri.conf.json"; exit 1; }
+	@[ "$(APP_VERSION)" = "$(CARGO_VERSION)" ] || { \
+		echo "Version mismatch: tauri.conf.json=$(APP_VERSION) Cargo.toml=$(CARGO_VERSION)"; exit 1; }
+	@[ "$$(git rev-parse --abbrev-ref HEAD)" = main ] || { echo "Release from main only."; exit 1; }
+	@git diff --quiet HEAD -- || { echo "Working tree has uncommitted changes; commit them first."; exit 1; }
+	@git fetch --quiet --tags origin
+	@! git rev-parse -q --verify "refs/tags/v$(APP_VERSION)" >/dev/null || { \
+		echo "Tag v$(APP_VERSION) already exists; bump the version first."; exit 1; }
+	@[ "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" ] || { \
+		echo "HEAD is not origin/main; push your commits first."; exit 1; }
+	git tag -a "v$(APP_VERSION)" -m "Beanstalk v$(APP_VERSION)"
+	git push origin "v$(APP_VERSION)"
+	@echo
+	@echo "Pushed v$(APP_VERSION). Watch the build: gh run watch  (or the repo's Actions tab)"
+	@echo "Then review and publish the draft release on GitHub."

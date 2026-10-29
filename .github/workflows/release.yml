@@ -1,0 +1,85 @@
+# Build installers for macOS and Linux and attach them to a draft GitHub Release.
+#
+# Triggered by pushing a version tag (`make release` does this). The release is
+# created as a DRAFT: review the assets, then publish it from the GitHub UI.
+#
+# macOS builds are NOT signed or notarized yet — see README "Install" for the
+# Gatekeeper override users need. To sign later, add the APPLE_* secrets that
+# tauri-action documents and pass them in `env` below.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+          # 22.04, not latest: an older glibc keeps the binaries runnable on
+          # older distros, and newer ones run them fine.
+          - platform: ubuntu-22.04
+            args: ""
+            rust-targets: ""
+          - platform: ubuntu-22.04-arm
+            args: ""
+            rust-targets: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Beanstalk ${{ github.ref_name }}
+          releaseBody: |
+            ## Downloads
+
+            | Platform | File |
+            | --- | --- |
+            | macOS (Apple Silicon + Intel) | `Beanstalk_*_universal.dmg` |
+            | Linux, any distro | `*.AppImage` (`chmod +x`, then run) |
+            | Debian / Ubuntu | `*.deb` |
+            | Fedora / RHEL / openSUSE | `*.rpm` |
+
+            Linux files come in `amd64`/`x86_64` and `arm64`/`aarch64` variants — pick the one matching your machine.
+
+            **Requires the [`beans`](https://github.com/hmans/beans) CLI** — install it first.
+
+            **macOS:** this build is not signed by Apple, so macOS will block it the first time.
+            See [Installing on macOS](https://github.com/${{ github.repository }}#installing-on-macos) for the one-time override.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
