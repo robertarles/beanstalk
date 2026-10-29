@@ -79,13 +79,13 @@ chmod +x Beanstalk_*.AppImage
 **Debian / Ubuntu:**
 
 ```sh
-sudo apt install ./beanstalk_*.deb
+sudo apt install ./Beanstalk_*.deb
 ```
 
 **Fedora / RHEL:**
 
 ```sh
-sudo dnf install ./beanstalk-*.rpm
+sudo dnf install ./Beanstalk-*.rpm
 ```
 
 ### Building from source / cutting a release
